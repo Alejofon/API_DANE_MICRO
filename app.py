@@ -37,12 +37,23 @@ def debug():
 
     try:
 
-        resultado = client.service.promediosSipsaCiudad()
+        services = {}
+
+        for service_name, service in client.wsdl.services.items():
+
+            services[service_name] = {}
+
+            for port_name, port in service.ports.items():
+
+                services[service_name][port_name] = {
+                    "binding_name": str(port.binding.name),
+                    "location": port.binding_options.get("address"),
+                    "operations": list(port.binding._operations.keys())
+                }
 
         return jsonify({
             "success": True,
-            "tipo": str(type(resultado)),
-            "data": str(resultado)[:5000]
+            "services": services
         })
 
     except Exception as e:
@@ -50,7 +61,7 @@ def debug():
             "success": False,
             "error": str(e)
         })
-
+    
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
