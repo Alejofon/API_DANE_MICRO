@@ -83,26 +83,13 @@ def test():
 
     try:
 
-        result = client.service.promediosSipsaCiudad()
-
-        # Convertir a lista pequeña
-        sample = []
-
-        count = 0
-
-        for item in result:
-
-            sample.append(str(item))
-
-            count += 1
-
-            if count >= 5:
-                break
+        # probar con parámetro simple
+        result = client.service.consultarInsumosSipsaMesMadr(1)
 
         return jsonify({
             "success": True,
-            "total_muestra": len(sample),
-            "sample": sample
+            "type": str(type(result)),
+            "data": str(result)[:3000]
         })
 
     except Exception as e:
