@@ -83,13 +83,26 @@ def test():
 
     try:
 
-        # Intentar consumir método SOAP
         result = client.service.promediosSipsaCiudad()
+
+        # Convertir a lista pequeña
+        sample = []
+
+        count = 0
+
+        for item in result:
+
+            sample.append(str(item))
+
+            count += 1
+
+            if count >= 5:
+                break
 
         return jsonify({
             "success": True,
-            "type": str(type(result)),
-            "data": str(result)[:5000]
+            "total_muestra": len(sample),
+            "sample": sample
         })
 
     except Exception as e:
