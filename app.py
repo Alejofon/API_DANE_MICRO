@@ -32,45 +32,18 @@ def debug():
     if client is None:
         return jsonify({
             "success": False,
-            "error": "No se pudo conectar al SOAP"
+            "error": "No hay conexión SOAP"
         })
-
-    data = {
-        "services": []
-    }
 
     try:
 
-        for service_name, service in client.wsdl.services.items():
+        resultado = client.service.promediosSipsaCiudad()
 
-            service_data = {
-                "service": service_name,
-                "ports": []
-            }
-
-            for port_name, port in service.ports.items():
-
-                port_data = {
-                    "port": port_name,
-                    "operations": []
-                }
-
-                operations = port.binding._operations
-
-                for operation_name, operation in operations.items():
-
-                    op_data = {
-                        "name": operation_name,
-                        "input": str(operation.input.signature())
-                    }
-
-                    port_data["operations"].append(op_data)
-
-                service_data["ports"].append(port_data)
-
-            data["services"].append(service_data)
-
-        return jsonify(data)
+        return jsonify({
+            "success": True,
+            "tipo": str(type(resultado)),
+            "data": str(resultado)[:5000]
+        })
 
     except Exception as e:
         return jsonify({
