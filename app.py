@@ -140,6 +140,41 @@ def debug():
             "success": False,
             "error": str(e)
         })
+    
+
+# -----------------------------------
+# Operation
+# -----------------------------------
+
+@app.route("/operations")
+def operations():
+
+    try:
+
+        operations = {}
+
+        binding = client.wsdl.bindings[
+            '{http://servicios.sipsa.co.gov.dane/}SrvSipsaUpraPortBinding'
+        ]
+
+        for op_name, operation in binding._operations.items():
+
+            operations[op_name] = {
+                "input": str(operation.input.signature()),
+                "output": str(operation.output.signature())
+            }
+
+        return jsonify({
+            "success": True,
+            "operations": operations
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
 
 # -----------------------------------
 # INICIO APP
