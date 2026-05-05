@@ -1,38 +1,116 @@
 import os
+import logging
+
 from flask import Flask, jsonify
 from flask_cors import CORS
+
 from zeep import Client
-import logging
+from zeep.transports import Transport
+
+from requests import Session
+
+# -----------------------------------
+# CONFIGURACIÓN FLASK
+# -----------------------------------
 
 app = Flask(__name__)
 CORS(app)
 
 logging.basicConfig(level=logging.INFO)
 
+# -----------------------------------
+# WSDL DEL DANE
+# -----------------------------------
+
 WSDL_URL = "http://appweb.dane.gov.co/sipsaWS/SrvSipsaUpraBeanService?WSDL"
+
+# -----------------------------------
+# CONFIGURAR CLIENTE SOAP
+# -----------------------------------
 
 client = None
 
 try:
-    client = Client(WSDL_URL)
-    print("✅ Conectado al SOAP del DANE")
+
+    # Crear sesión HTTP
+    session = Session()
+
+    # Crear transporte para Zeep
+    transport = Transport(session=session)
+
+    # Crear cliente SOAP
+    client = Client(
+        wsdl=WSDL_URL,
+        transport=transport
+    )
+
+    # FORZAR endpoint manualmente
+    client.service._binding_options["address"] = (
+        "https://appweb.dane.gov.co/sipsaWS/SrvSipsaUpraBeanService"
+    )
+
+    print("✅ Cliente SOAP conectado")
+
 except Exception as e:
-    print(f"❌ Error SOAP: {e}")
+
+    print(f"❌ Error creando cliente SOAP: {e}")
+
+# -----------------------------------
+# RUTA PRINCIPAL
+# -----------------------------------
 
 @app.route("/")
 def home():
+
     return jsonify({
         "status": "online",
         "soap_connected": client is not None
     })
 
+# -----------------------------------
+# TEST SOAP
+# -----------------------------------
+
+@app.route("/test")
+def test():
+
+    if client is None:
+
+        return jsonify({
+            "success": False,
+            "error": "Cliente SOAP no inicializado"
+        })
+
+    try:
+
+        # Intentar consumir método SOAP
+        result = client.service.promediosSipsaCiudad()
+
+        return jsonify({
+            "success": True,
+            "type": str(type(result)),
+            "data": str(result)[:5000]
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
+# -----------------------------------
+# DEBUG INFO
+# -----------------------------------
+
 @app.route("/debug")
 def debug():
 
     if client is None:
+
         return jsonify({
             "success": False,
-            "error": "No hay conexión SOAP"
+            "error": "Cliente SOAP no inicializado"
         })
 
     try:
@@ -57,11 +135,21 @@ def debug():
         })
 
     except Exception as e:
+
         return jsonify({
             "success": False,
             "error": str(e)
         })
-    
+
+# -----------------------------------
+# INICIO APP
+# -----------------------------------
+
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
