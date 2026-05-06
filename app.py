@@ -1,5 +1,6 @@
 import os
 import logging
+import psycopg2
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -9,12 +10,46 @@ from zeep.transports import Transport
 
 from requests import Session
 
+
+
 # -----------------------------------
 # CONFIGURACIÓN FLASK
 # -----------------------------------
 
 app = Flask(__name__)
 CORS(app)
+
+# -----------------------------------
+# CONEXIÓN POSTGRESQL
+# -----------------------------------
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+db_connected = False
+
+try:
+
+    conn = psycopg2.connect(DATABASE_URL)
+
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT version();")
+
+    version = cursor.fetchone()
+
+    print("✅ PostgreSQL conectado")
+    print(version)
+
+    db_connected = True
+
+    cursor.close()
+    conn.close()
+
+except Exception as e:
+
+    print(f"❌ Error PostgreSQL: {e}")
+
+# -----------------------------------
 
 logging.basicConfig(level=logging.INFO)
 
@@ -63,9 +98,10 @@ except Exception as e:
 def home():
 
     return jsonify({
-        "status": "online",
-        "soap_connected": client is not None
-    })
+    "status": "online",
+    "soap_connected": client is not None,
+    "postgres_connected": db_connected
+})
 
 # -----------------------------------
 # TEST SOAP
