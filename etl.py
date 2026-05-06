@@ -1,131 +1,198 @@
-import os
-from zeep import Client
-from zeep.transports import Transport
-from requests import Session
+import requests
+import xml.etree.ElementTree as ET
 import psycopg2
 from psycopg2.extras import execute_batch
-import json
+from decimal import Decimal
+from datetime import datetime
+import os
 
-
-#=================
-# SOAP CONFIG
+# =========================
+# CONFIG
 # =========================
 
-WSDL_URL = "https://appweb.dane.gov.co/sipsaWS/SrvSipsaUpraBeanService?wsdl"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-print("🚀 Conectando al SOAP del DANE...")
+SOAP_URL = "http://appweb.dane.gov.co:80/sipsaWS/SrvSipsaUpraBeanService"
 
-session = Session()
+HEADERS = {
+    "Content-Type": "text/xml;charset=UTF-8",
+    "SOAPAction": ""
+}
 
-transport = Transport(
-    session=session,
+SOAP_BODY = """<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope
+    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:ser="http://servicios.sipsa.co.gov.dane/">
+
+   <soapenv:Header/>
+
+   <soapenv:Body>
+      <ser:promediosSipsaParcial/>
+   </soapenv:Body>
+
+</soapenv:Envelope>
+"""
+
+# =========================
+# DESCARGA SOAP
+# =========================
+
+print("🚀 Descargando datos del DANE...")
+
+response = requests.post(
+    SOAP_URL,
+    data=SOAP_BODY,
+    headers=HEADERS,
     timeout=300
 )
 
-client = Client(
-    wsdl=WSDL_URL,
-    transport=transport
-)
+print("✅ STATUS:", response.status_code)
 
-# FORZAR endpoint HTTPS
-client.service._binding_options["address"] = (
-    "https://appweb.dane.gov.co/sipsaWS/SrvSipsaUpraBeanService"
-)
+xml_content = response.text
 
-print("✅ SOAP conectado")
+if response.status_code != 200:
+    print(xml_content)
+    raise Exception("Error consultando SOAP")
 
 # =========================
-# DESCARGAR DATOS
+# PARSE XML
 # =========================
 
-print("📥 Descargando datos...")
+ns = {
+    "soap": "http://schemas.xmlsoap.org/soap/envelope/"
+}
 
-data = client.service.promediosSipsaParcial()
+root = ET.fromstring(xml_content)
 
-print("✅ Datos descargados")
+# =========================
+# EXTRAER ITEMS
+# =========================
 
-print("📦 Tipo:", type(data))
+rows = []
 
-try:
-    print("📊 Cantidad registros:", len(data))
-except:
-    print("⚠️ No se pudo medir longitud")
+for item in root.iter():
 
-# Mostrar primeros registros
-for i, item in enumerate(data[:5]):
-    print(f"\n===== REGISTRO {i+1} =====")
-    print(item)
+    data = {}
+
+    for child in item:
+        tag = child.tag.split("}")[-1]
+        value = child.text
+
+        data[tag] = value
+
+    # solo procesar registros válidos
+    if "artiNombre" not in data:
+        continue
+
+    try:
+
+        fecha = None
+
+        if data.get("enmaFecha"):
+            fecha = datetime.fromisoformat(
+                data["enmaFecha"].replace("Z", "+00:00")
+            ).date()
+
+        row = (
+            data.get("artiNombre"),
+            data.get("grupNombre"),
+            data.get("muniNombre"),
+            data.get("deptNombre"),
+            data.get("fuenNombre"),
+            fecha,
+            Decimal(data.get("minimoKg", "0")),
+            Decimal(data.get("maximoKg", "0")),
+            Decimal(data.get("promedioKg", "0"))
+        )
+
+        rows.append(row)
+
+    except Exception as e:
+        print("❌ Error procesando fila:", e)
+
+print(f"📦 Registros procesados: {len(rows)}")
 
 # =========================
 # POSTGRES
 # =========================
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-print("\n🐘 Conectando PostgreSQL...")
-
 conn = psycopg2.connect(DATABASE_URL)
 
-cursor = conn.cursor()
-
-print("✅ PostgreSQL conectado")
+cur = conn.cursor()
 
 # =========================
 # CREAR TABLA
 # =========================
 
-# =========================
-# CREAR TABLA
-# =========================
+cur.execute("""
+CREATE TABLE IF NOT EXISTS precios_sipsa (
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS dane_raw (
     id SERIAL PRIMARY KEY,
-    data JSONB
+
+    articulo TEXT,
+    grupo TEXT,
+
+    ciudad TEXT,
+    departamento TEXT,
+
+    fuente TEXT,
+
+    fecha DATE,
+
+    precio_min NUMERIC,
+    precio_max NUMERIC,
+    precio_promedio NUMERIC
 )
 """)
 
 conn.commit()
 
-print("✅ Tabla lista")
-
 # =========================
-# LIMPIAR DATOS ANTERIORES
+# LIMPIAR TABLA
 # =========================
 
-print("🗑️ Eliminando datos anteriores...")
+print("🧹 Eliminando datos anteriores...")
 
-cursor.execute("TRUNCATE TABLE dane_raw RESTART IDENTITY")
+cur.execute("TRUNCATE TABLE precios_sipsa")
 
 conn.commit()
 
-print("✅ Tabla limpiada")
-
 # =========================
-# INSERTAR DATOS
+# INSERT MASIVO
 # =========================
 
-print("💾 Guardando datos...")
-
-rows = []
-
-for item in data:
-    rows.append(
-        (json.dumps(item, default=str),)
-    )
+print("⬆️ Insertando registros...")
 
 execute_batch(
-    cursor,
-    "INSERT INTO dane_raw (data) VALUES (%s)",
+    cur,
+    """
+    INSERT INTO precios_sipsa (
+
+        articulo,
+        grupo,
+        ciudad,
+        departamento,
+        fuente,
+        fecha,
+        precio_min,
+        precio_max,
+        precio_promedio
+
+    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """,
     rows,
-    page_size=100
+    page_size=1000
 )
 
 conn.commit()
 
-print(f"✅ {len(rows)} registros guardados")
+print("✅ Carga completada")
 
-cursor.close()
+# =========================
+# CERRAR
+# =========================
+
+cur.close()
 conn.close()
 
-print("🎉 ETL FINALIZADO")
+print("🏁 ETL FINALIZADO")
