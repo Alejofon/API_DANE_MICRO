@@ -1,29 +1,59 @@
-from zeep import Client
-from zeep.transports import Transport
-from requests import Session
+import os
+import time
+from decimal import Decimal
+
 import psycopg2
 from psycopg2.extras import execute_batch
-from decimal import Decimal
-from datetime import datetime
-import os
 
-# ==========================================
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from zeep import Client
+from zeep.transports import Transport
+from zeep.exceptions import XMLSyntaxError, TransportError
+
+# ======================================================
 # CONFIG
-# ==========================================
+# ======================================================
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 WSDL = "http://appweb.dane.gov.co:80/sipsaWS/SrvSipsaUpraBeanService?wsdl"
 
-# ==========================================
-# SOAP CLIENT
-# ==========================================
-
-print("🚀 Conectando SOAP...")
+# ======================================================
+# SESSION HTTP ROBUSTA
+# ======================================================
 
 session = Session()
 
-transport = Transport(session=session, timeout=300)
+retry_strategy = Retry(
+    total=5,
+    backoff_factor=2,
+    status_forcelist=[500, 502, 503, 504],
+    allowed_methods=["GET", "POST"]
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+
+session.headers.update({
+    "User-Agent": "Mozilla/5.0",
+    "Connection": "keep-alive"
+})
+
+transport = Transport(
+    session=session,
+    timeout=300
+)
+
+# ======================================================
+# SOAP CLIENT
+# ======================================================
+
+print("🚀 Conectando SOAP...")
 
 client = Client(
     wsdl=WSDL,
@@ -32,24 +62,56 @@ client = Client(
 
 print("✅ SOAP conectado")
 
-# ==========================================
-# DESCARGAR DATOS
-# ==========================================
+# ======================================================
+# DESCARGA CON RETRY
+# ======================================================
 
-print("📥 Descargando datos DANE...")
+MAX_RETRIES = 5
 
-result = client.service.promediosSipsaParcial()
+result = None
 
-print("✅ Datos recibidos")
+for attempt in range(MAX_RETRIES):
+
+    try:
+
+        print(f"📥 Descargando datos DANE (intento {attempt+1})...")
+
+        result = client.service.promediosSipsaParcial()
+
+        if result:
+            print("✅ Datos recibidos correctamente")
+            break
+
+    except XMLSyntaxError as e:
+
+        print("❌ XMLSyntaxError:", str(e))
+
+    except TransportError as e:
+
+        print("❌ TransportError:", str(e))
+
+    except Exception as e:
+
+        print("❌ Error general:", str(e))
+
+    wait_time = (attempt + 1) * 10
+
+    print(f"⏳ Esperando {wait_time} segundos...")
+
+    time.sleep(wait_time)
+
+# ======================================================
+# VALIDACIÓN
+# ======================================================
 
 if not result:
-    raise Exception("❌ No llegaron datos")
+    raise Exception("❌ No fue posible descargar datos del DANE")
 
-print(f"📦 Total registros: {len(result)}")
+print(f"📦 Total registros recibidos: {len(result)}")
 
-# ==========================================
-# PROCESAR
-# ==========================================
+# ======================================================
+# PROCESAR DATOS
+# ======================================================
 
 rows = []
 
@@ -83,13 +145,14 @@ for item in result:
         rows.append(row)
 
     except Exception as e:
-        print("❌ Error fila:", e)
+
+        print("❌ Error procesando fila:", e)
 
 print(f"✅ Filas procesadas: {len(rows)}")
 
-# ==========================================
+# ======================================================
 # POSTGRES
-# ==========================================
+# ======================================================
 
 print("🐘 Conectando PostgreSQL...")
 
@@ -99,11 +162,12 @@ cur = conn.cursor()
 
 print("✅ PostgreSQL conectado")
 
-# ==========================================
+# ======================================================
 # TABLA
-# ==========================================
+# ======================================================
 
 cur.execute("""
+
 CREATE TABLE IF NOT EXISTS precios_sipsa (
 
     id SERIAL PRIMARY KEY,
@@ -123,13 +187,14 @@ CREATE TABLE IF NOT EXISTS precios_sipsa (
     precio_promedio NUMERIC
 
 )
+
 """)
 
 conn.commit()
 
-# ==========================================
-# LIMPIAR DATOS ANTERIORES
-# ==========================================
+# ======================================================
+# LIMPIAR TABLA
+# ======================================================
 
 print("🧹 Eliminando datos anteriores...")
 
@@ -137,15 +202,16 @@ cur.execute("TRUNCATE TABLE precios_sipsa")
 
 conn.commit()
 
-# ==========================================
+# ======================================================
 # INSERT MASIVO
-# ==========================================
+# ======================================================
 
 print("⬆️ Insertando registros...")
 
 execute_batch(
     cur,
     """
+
     INSERT INTO precios_sipsa (
 
         articulo,
@@ -159,7 +225,9 @@ execute_batch(
         precio_promedio
 
     )
+
     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+
     """,
     rows,
     page_size=1000
@@ -169,9 +237,9 @@ conn.commit()
 
 print("✅ Datos insertados")
 
-# ==========================================
+# ======================================================
 # ÍNDICES
-# ==========================================
+# ======================================================
 
 print("⚡ Creando índices...")
 
@@ -192,9 +260,9 @@ ON precios_sipsa(fecha)
 
 conn.commit()
 
-# ==========================================
-# CERRAR
-# ==========================================
+# ======================================================
+# FINALIZAR
+# ======================================================
 
 cur.close()
 conn.close()
