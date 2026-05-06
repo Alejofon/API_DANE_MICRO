@@ -281,6 +281,69 @@ def insert_test():
             "success": False,
             "error": str(e)
         })
+    
+#-----------------------------------
+# Consultar datos de prueba
+#-----------------------------------
+@app.route("/data")
+def get_data():
+
+    try:
+
+        conn = psycopg2.connect(DATABASE_URL)
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+
+            SELECT
+                id,
+                producto,
+                ciudad,
+                precio,
+                fecha_consulta,
+                fuente,
+                created_at
+
+            FROM precios_agro
+
+            ORDER BY id DESC
+
+            LIMIT 20;
+
+        """)
+
+        rows = cursor.fetchall()
+
+        data = []
+
+        for row in rows:
+
+            data.append({
+                "id": row[0],
+                "producto": row[1],
+                "ciudad": row[2],
+                "precio": float(row[3]),
+                "fecha_consulta": str(row[4]),
+                "fuente": row[5],
+                "created_at": str(row[6])
+            })
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "total": len(data),
+            "data": data
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
 # -----------------------------------
 # Operation
 # -----------------------------------
