@@ -227,6 +227,60 @@ def create_table():
             "success": False,
             "error": str(e)
         })
+    
+#-----------------------------------
+# Insertar datos de prueba
+#-----------------------------------
+@app.route("/insert-test")
+def insert_test():
+
+    try:
+
+        conn = psycopg2.connect(DATABASE_URL)
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+
+            INSERT INTO precios_agro (
+                producto,
+                ciudad,
+                precio,
+                fecha_consulta,
+                fuente
+            )
+
+            VALUES (
+                %s,
+                %s,
+                %s,
+                CURRENT_DATE,
+                %s
+            )
+
+        """, (
+            "cebolla",
+            "Bogotá",
+            2500,
+            "DANE"
+        ))
+
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": "Registro insertado"
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
 # -----------------------------------
 # Operation
 # -----------------------------------
