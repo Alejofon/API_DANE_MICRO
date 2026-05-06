@@ -177,7 +177,56 @@ def debug():
             "error": str(e)
         })
     
+#-----------------------------------
+#Create table
+#-----------------------------------
+@app.route("/create-table")
+def create_table():
 
+    try:
+
+        conn = psycopg2.connect(DATABASE_URL)
+
+        cursor = conn.cursor()
+
+        cursor.execute("""
+
+            CREATE TABLE IF NOT EXISTS precios_agro (
+
+                id SERIAL PRIMARY KEY,
+
+                producto TEXT,
+
+                ciudad TEXT,
+
+                precio NUMERIC,
+
+                fecha_consulta DATE,
+
+                fuente TEXT,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+            );
+
+        """)
+
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "message": "Tabla creada correctamente"
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
 # -----------------------------------
 # Operation
 # -----------------------------------
