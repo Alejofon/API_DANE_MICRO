@@ -1,9 +1,9 @@
 import os
-import ast
 import psycopg2
-
-from flask import Flask, jsonify
+from psycopg2.extras import RealDictCursor
+from flask import Flask, jsonify, request
 from flask_cors import CORS
+from datetime import datetime
 
 # -----------------------------------
 # CONFIG FLASK
@@ -13,10 +13,15 @@ app = Flask(__name__)
 CORS(app)
 
 # -----------------------------------
-# DATABASE
+# DATABASE CONNECTION
 # -----------------------------------
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+def get_db_connection():
+    """Retorna una conexión a PostgreSQL con cursor de diccionario"""
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
 
 # -----------------------------------
 # HOME
@@ -24,168 +29,489 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 @app.route("/")
 def home():
-
     return jsonify({
         "success": True,
-        "message": "API DANE online"
+        "message": "API DANE - Precios SIPSA",
+        "endpoints": {
+            "productos": "/productos",
+            "productos_con_precios": "/productos?precio_min=1000&precio_max=5000",
+            "producto_especifico": "/producto/aguacate",
+            "departamentos": "/departamentos",
+            "departamento_especifico": "/departamento/BOGOTA",
+            "grupos": "/grupos",
+            "estadisticas": "/estadisticas",
+            "fecha_especifica": "/fecha/2024-01-01",
+            "rango_fechas": "/rango-fechas?inicio=2024-01-01&fin=2024-12-31"
+        }
     })
 
 # -----------------------------------
-# CONSULTAR DATOS
+# LISTAR PRODUCTOS (con filtros)
 # -----------------------------------
 
-@app.route("/data")
-def get_data():
-
+@app.route("/productos")
+def listar_productos():
+    """
+    Lista productos con filtros opcionales:
+    - grupo: filtrar por grupo (FRUTAS, VERDURAS, etc)
+    - departamento: filtrar por departamento
+    - precio_min: precio promedio mínimo
+    - precio_max: precio promedio máximo
+    - fecha_inicio y fecha_fin: rango de fechas
+    - limit: cantidad de resultados (default 100)
+    """
     try:
-
-        conn = psycopg2.connect(DATABASE_URL)
-
-        cursor = conn.cursor()
-
-        cursor.execute("""
-
-            SELECT
-                id,
-                data
-
-            FROM dane_raw
-
-            ORDER BY id DESC
-
-            LIMIT 100;
-
-        """)
-
-        rows = cursor.fetchall()
-
-        results = []
-
-        for row in rows:
-
-            row_id = row[0]
-
-            raw_data = row[1]
-
-            try:
-
-                # Convertir string a diccionario
-                parsed = ast.literal_eval(raw_data)
-
-                item = {
-                    "id": row_id,
-                    "producto": parsed.get("artiNombre"),
-                    "grupo": parsed.get("grupNombre"),
-                    "departamento": parsed.get("deptNombre"),
-                    "municipio": parsed.get("muniNombre"),
-                    "fuente": parsed.get("fuenNombre"),
-                    "precio_min": str(parsed.get("minimoKg")),
-                    "precio_max": str(parsed.get("maximoKg")),
-                    "precio_promedio": str(parsed.get("promedioKg")),
-                    "fecha": str(parsed.get("enmaFecha"))
-                }
-
-                results.append(item)
-
-            except Exception as parse_error:
-
-                results.append({
-                    "id": row_id,
-                    "error": str(parse_error)
-                })
-
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Obtener parámetros de consulta
+        grupo = request.args.get('grupo')
+        departamento = request.args.get('departamento')
+        precio_min = request.args.get('precio_min')
+        precio_max = request.args.get('precio_max')
+        fecha_inicio = request.args.get('fecha_inicio')
+        fecha_fin = request.args.get('fecha_fin')
+        limit = request.args.get('limit', 100, type=int)
+        
+        # Construir consulta dinámica
+        query = """
+            SELECT DISTINCT 
+                arti_nombre as producto,
+                grup_nombre as grupo,
+                dept_nombre as departamento,
+                MIN(promedio_kg) as precio_minimo_historico,
+                MAX(promedio_kg) as precio_maximo_historico,
+                AVG(promedio_kg) as precio_promedio_historico,
+                COUNT(*) as total_registros
+            FROM dane_normalizado
+            WHERE 1=1
+        """
+        params = []
+        
+        if grupo:
+            query += " AND grup_nombre ILIKE %s"
+            params.append(f"%{grupo}%")
+        
+        if departamento:
+            query += " AND dept_nombre ILIKE %s"
+            params.append(f"%{departamento}%")
+        
+        if precio_min:
+            query += " AND promedio_kg >= %s"
+            params.append(float(precio_min))
+        
+        if precio_max:
+            query += " AND promedio_kg <= %s"
+            params.append(float(precio_max))
+        
+        if fecha_inicio:
+            query += " AND enma_fecha >= %s"
+            params.append(fecha_inicio)
+        
+        if fecha_fin:
+            query += " AND enma_fecha <= %s"
+            params.append(fecha_fin)
+        
+        query += " GROUP BY arti_nombre, grup_nombre, dept_nombre ORDER BY arti_nombre LIMIT %s"
+        params.append(limit)
+        
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+        
         cursor.close()
         conn.close()
-
+        
         return jsonify({
             "success": True,
             "total": len(results),
+            "filtros_aplicados": {
+                "grupo": grupo,
+                "departamento": departamento,
+                "precio_min": precio_min,
+                "precio_max": precio_max,
+                "fecha_inicio": fecha_inicio,
+                "fecha_fin": fecha_fin
+            },
             "data": results
         })
-
+        
     except Exception as e:
-
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        })
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # -----------------------------------
-# FILTRAR POR PRODUCTO
+# BUSCAR PRODUCTO ESPECÍFICO
 # -----------------------------------
 
 @app.route("/producto/<nombre>")
 def buscar_producto(nombre):
-
+    """Busca un producto específico con su evolución de precios"""
     try:
-
-        conn = psycopg2.connect(DATABASE_URL)
-
-        cursor = conn.cursor()
-
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Información general del producto
         cursor.execute("""
-
-            SELECT
-                id,
-                data
-
-            FROM dane_raw
-
-            WHERE data ILIKE %s
-
-            LIMIT 100;
-
+            SELECT 
+                arti_nombre as producto,
+                grup_nombre as grupo,
+                COUNT(*) as total_registros,
+                MIN(enma_fecha) as primera_fecha,
+                MAX(enma_fecha) as ultima_fecha,
+                MIN(promedio_kg) as precio_minimo_historico,
+                MAX(promedio_kg) as precio_maximo_historico,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio_historico
+            FROM dane_normalizado
+            WHERE arti_nombre ILIKE %s
+            GROUP BY arti_nombre, grup_nombre
         """, (f"%{nombre}%",))
-
-        rows = cursor.fetchall()
-
-        results = []
-
-        for row in rows:
-
-            raw_data = row[1]
-
-            try:
-
-                parsed = ast.literal_eval(raw_data)
-
-                results.append({
-                    "producto": parsed.get("artiNombre"),
-                    "grupo": parsed.get("grupNombre"),
-                    "municipio": parsed.get("muniNombre"),
-                    "precio_promedio": str(parsed.get("promedioKg")),
-                    "fecha": str(parsed.get("enmaFecha"))
-                })
-
-            except:
-                pass
-
+        
+        info_producto = cursor.fetchone()
+        
+        if not info_producto:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": f"No se encontró el producto: {nombre}"
+            }), 404
+        
+        # Evolución de precios por fecha
+        cursor.execute("""
+            SELECT 
+                enma_fecha as fecha,
+                dept_nombre as departamento,
+                muni_nombre as municipio,
+                fuen_nombre as fuente,
+                minimo_kg as precio_minimo,
+                maximo_kg as precio_maximo,
+                promedio_kg as precio_promedio
+            FROM dane_normalizado
+            WHERE arti_nombre ILIKE %s
+            ORDER BY enma_fecha DESC, promedio_kg DESC
+            LIMIT 50
+        """, (f"%{nombre}%",))
+        
+        evolucion = cursor.fetchall()
+        
         cursor.close()
         conn.close()
-
+        
         return jsonify({
             "success": True,
-            "producto": nombre,
+            "informacion_general": info_producto,
+            "ultimos_precios": evolucion
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# -----------------------------------
+# LISTAR DEPARTAMENTOS
+# -----------------------------------
+
+@app.route("/departamentos")
+def listar_departamentos():
+    """Lista todos los departamentos con estadísticas"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                dept_nombre as departamento,
+                COUNT(DISTINCT arti_nombre) as total_productos,
+                COUNT(*) as total_registros,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio_general,
+                MIN(enma_fecha) as fecha_primer_registro,
+                MAX(enma_fecha) as fecha_ultimo_registro
+            FROM dane_normalizado
+            WHERE dept_nombre IS NOT NULL
+            GROUP BY dept_nombre
+            ORDER BY dept_nombre
+        """)
+        
+        results = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
             "total": len(results),
             "data": results
         })
-
+        
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
+# -----------------------------------
+# DEPARTAMENTO ESPECÍFICO
+# -----------------------------------
+
+@app.route("/departamento/<nombre>")
+def buscar_departamento(nombre):
+    """Obtiene información de un departamento específico"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                d.dept_nombre as departamento,
+                d.arti_nombre as producto,
+                d.grup_nombre as grupo,
+                AVG(d.promedio_kg)::NUMERIC(10,2) as precio_promedio,
+                MIN(d.promedio_kg) as precio_minimo,
+                MAX(d.promedio_kg) as precio_maximo,
+                COUNT(*) as registros,
+                MAX(d.enma_fecha) as ultima_actualizacion
+            FROM dane_normalizado d
+            WHERE d.dept_nombre ILIKE %s
+            GROUP BY d.dept_nombre, d.arti_nombre, d.grup_nombre
+            ORDER BY d.arti_nombre
+            LIMIT 100
+        """, (f"%{nombre}%",))
+        
+        results = cursor.fetchall()
+        
+        if not results:
+            cursor.close()
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": f"No se encontró el departamento: {nombre}"
+            }), 404
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "departamento": nombre,
+            "total_productos": len(results),
+            "data": results
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# -----------------------------------
+# LISTAR GRUPOS
+# -----------------------------------
+
+@app.route("/grupos")
+def listar_grupos():
+    """Lista todos los grupos de productos (FRUTAS, VERDURAS, etc)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                grup_nombre as grupo,
+                COUNT(DISTINCT arti_nombre) as total_productos,
+                COUNT(*) as total_registros,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio_general
+            FROM dane_normalizado
+            WHERE grup_nombre IS NOT NULL
+            GROUP BY grup_nombre
+            ORDER BY grup_nombre
+        """)
+        
+        results = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "total": len(results),
+            "data": results
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# -----------------------------------
+# ESTADÍSTICAS GENERALES
+# -----------------------------------
+
+@app.route("/estadisticas")
+def estadisticas_generales():
+    """Estadísticas generales de toda la base de datos"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as total_registros,
+                COUNT(DISTINCT arti_nombre) as total_productos,
+                COUNT(DISTINCT dept_nombre) as total_departamentos,
+                COUNT(DISTINCT grup_nombre) as total_grupos,
+                MIN(enma_fecha) as fecha_mas_antigua,
+                MAX(enma_fecha) as fecha_mas_reciente,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio_general,
+                MIN(promedio_kg) as precio_minimo_absoluto,
+                MAX(promedio_kg) as precio_maximo_absoluto
+            FROM dane_normalizado
+        """)
+        
+        stats = cursor.fetchone()
+        
+        # Top 5 productos más caros
+        cursor.execute("""
+            SELECT 
+                arti_nombre as producto,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio
+            FROM dane_normalizado
+            GROUP BY arti_nombre
+            ORDER BY precio_promedio DESC
+            LIMIT 5
+        """)
+        
+        top_caros = cursor.fetchall()
+        
+        # Top 5 productos más baratos
+        cursor.execute("""
+            SELECT 
+                arti_nombre as producto,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio
+            FROM dane_normalizado
+            GROUP BY arti_nombre
+            ORDER BY precio_promedio ASC
+            LIMIT 5
+        """)
+        
+        top_baratos = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "estadisticas_generales": stats,
+            "productos_mas_caros": top_caros,
+            "productos_mas_baratos": top_baratos
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# -----------------------------------
+# CONSULTAR POR FECHA ESPECÍFICA
+# -----------------------------------
+
+@app.route("/fecha/<fecha>")
+def consultar_por_fecha(fecha):
+    """Obtiene todos los precios de una fecha específica"""
+    try:
+        # Validar formato de fecha
+        datetime.strptime(fecha, '%Y-%m-%d')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                arti_nombre as producto,
+                grup_nombre as grupo,
+                dept_nombre as departamento,
+                muni_nombre as municipio,
+                promedio_kg as precio_promedio,
+                minimo_kg as precio_minimo,
+                maximo_kg as precio_maximo,
+                fuen_nombre as fuente
+            FROM dane_normalizado
+            WHERE enma_fecha = %s
+            ORDER BY arti_nombre
+            LIMIT 1000
+        """, (fecha,))
+        
+        results = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "fecha": fecha,
+            "total_registros": len(results),
+            "data": results
+        })
+        
+    except ValueError:
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "Formato de fecha inválido. Use YYYY-MM-DD"
+        }), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# -----------------------------------
+# RANGO DE FECHAS
+# -----------------------------------
+
+@app.route("/rango-fechas")
+def rango_fechas():
+    """Consulta precios en un rango de fechas"""
+    try:
+        fecha_inicio = request.args.get('inicio')
+        fecha_fin = request.args.get('fin')
+        
+        if not fecha_inicio or not fecha_fin:
+            return jsonify({
+                "success": False,
+                "error": "Se requieren los parámetros 'inicio' y 'fin'"
+            }), 400
+        
+        # Validar fechas
+        datetime.strptime(fecha_inicio, '%Y-%m-%d')
+        datetime.strptime(fecha_fin, '%Y-%m-%d')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cursor.execute("""
+            SELECT 
+                enma_fecha as fecha,
+                COUNT(DISTINCT arti_nombre) as total_productos,
+                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio,
+                MIN(promedio_kg) as precio_minimo,
+                MAX(promedio_kg) as precio_maximo
+            FROM dane_normalizado
+            WHERE enma_fecha BETWEEN %s AND %s
+            GROUP BY enma_fecha
+            ORDER BY enma_fecha
+        """, (fecha_inicio, fecha_fin))
+        
+        results = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "rango": {
+                "inicio": fecha_inicio,
+                "fin": fecha_fin
+            },
+            "total_fechas": len(results),
+            "data": results
         })
+        
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "error": "Formato de fecha inválido. Use YYYY-MM-DD"
+        }), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # -----------------------------------
 # START APP
 # -----------------------------------
 
 if __name__ == "__main__":
-
     port = int(os.environ.get("PORT", 5000))
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    app.run(host="0.0.0.0", port=port, debug=False)
