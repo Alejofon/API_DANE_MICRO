@@ -1,128 +1,107 @@
-import requests
-import xml.etree.ElementTree as ET
+from zeep import Client
+from zeep.transports import Transport
+from requests import Session
 import psycopg2
 from psycopg2.extras import execute_batch
 from decimal import Decimal
 from datetime import datetime
 import os
 
-# =========================
+# ==========================================
 # CONFIG
-# =========================
+# ==========================================
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-SOAP_URL = "http://appweb.dane.gov.co:80/sipsaWS/SrvSipsaUpraBeanService"
+WSDL = "http://appweb.dane.gov.co:80/sipsaWS/SrvSipsaUpraBeanService?wsdl"
 
-HEADERS = {
-    "Content-Type": "text/xml;charset=UTF-8",
-    "SOAPAction": ""
-}
+# ==========================================
+# SOAP CLIENT
+# ==========================================
 
-SOAP_BODY = """<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope
-    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-    xmlns:ser="http://servicios.sipsa.co.gov.dane/">
+print("🚀 Conectando SOAP...")
 
-   <soapenv:Header/>
+session = Session()
 
-   <soapenv:Body>
-      <ser:promediosSipsaParcial/>
-   </soapenv:Body>
+transport = Transport(session=session, timeout=300)
 
-</soapenv:Envelope>
-"""
-
-# =========================
-# DESCARGA SOAP
-# =========================
-
-print("🚀 Descargando datos del DANE...")
-
-response = requests.post(
-    SOAP_URL,
-    data=SOAP_BODY,
-    headers=HEADERS,
-    timeout=300
+client = Client(
+    wsdl=WSDL,
+    transport=transport
 )
 
-print("✅ STATUS:", response.status_code)
+print("✅ SOAP conectado")
 
-xml_content = response.text
+# ==========================================
+# DESCARGAR DATOS
+# ==========================================
 
-if response.status_code != 200:
-    print(xml_content)
-    raise Exception("Error consultando SOAP")
+print("📥 Descargando datos DANE...")
 
-# =========================
-# PARSE XML
-# =========================
+result = client.service.promediosSipsaParcial()
 
-ns = {
-    "soap": "http://schemas.xmlsoap.org/soap/envelope/"
-}
+print("✅ Datos recibidos")
 
-root = ET.fromstring(xml_content)
+if not result:
+    raise Exception("❌ No llegaron datos")
 
-# =========================
-# EXTRAER ITEMS
-# =========================
+print(f"📦 Total registros: {len(result)}")
+
+# ==========================================
+# PROCESAR
+# ==========================================
 
 rows = []
 
-for item in root.iter():
-
-    data = {}
-
-    for child in item:
-        tag = child.tag.split("}")[-1]
-        value = child.text
-
-        data[tag] = value
-
-    # solo procesar registros válidos
-    if "artiNombre" not in data:
-        continue
+for item in result:
 
     try:
 
         fecha = None
 
-        if data.get("enmaFecha"):
-            fecha = datetime.fromisoformat(
-                data["enmaFecha"].replace("Z", "+00:00")
-            ).date()
+        if item.enmaFecha:
+            fecha = item.enmaFecha.date()
 
         row = (
-            data.get("artiNombre"),
-            data.get("grupNombre"),
-            data.get("muniNombre"),
-            data.get("deptNombre"),
-            data.get("fuenNombre"),
+
+            str(item.artiNombre) if item.artiNombre else None,
+            str(item.grupNombre) if item.grupNombre else None,
+
+            str(item.muniNombre) if item.muniNombre else None,
+            str(item.deptNombre) if item.deptNombre else None,
+
+            str(item.fuenNombre) if item.fuenNombre else None,
+
             fecha,
-            Decimal(data.get("minimoKg", "0")),
-            Decimal(data.get("maximoKg", "0")),
-            Decimal(data.get("promedioKg", "0"))
+
+            Decimal(item.minimoKg) if item.minimoKg else 0,
+            Decimal(item.maximoKg) if item.maximoKg else 0,
+            Decimal(item.promedioKg) if item.promedioKg else 0
+
         )
 
         rows.append(row)
 
     except Exception as e:
-        print("❌ Error procesando fila:", e)
+        print("❌ Error fila:", e)
 
-print(f"📦 Registros procesados: {len(rows)}")
+print(f"✅ Filas procesadas: {len(rows)}")
 
-# =========================
+# ==========================================
 # POSTGRES
-# =========================
+# ==========================================
+
+print("🐘 Conectando PostgreSQL...")
 
 conn = psycopg2.connect(DATABASE_URL)
 
 cur = conn.cursor()
 
-# =========================
-# CREAR TABLA
-# =========================
+print("✅ PostgreSQL conectado")
+
+# ==========================================
+# TABLA
+# ==========================================
 
 cur.execute("""
 CREATE TABLE IF NOT EXISTS precios_sipsa (
@@ -142,14 +121,15 @@ CREATE TABLE IF NOT EXISTS precios_sipsa (
     precio_min NUMERIC,
     precio_max NUMERIC,
     precio_promedio NUMERIC
+
 )
 """)
 
 conn.commit()
 
-# =========================
-# LIMPIAR TABLA
-# =========================
+# ==========================================
+# LIMPIAR DATOS ANTERIORES
+# ==========================================
 
 print("🧹 Eliminando datos anteriores...")
 
@@ -157,9 +137,9 @@ cur.execute("TRUNCATE TABLE precios_sipsa")
 
 conn.commit()
 
-# =========================
+# ==========================================
 # INSERT MASIVO
-# =========================
+# ==========================================
 
 print("⬆️ Insertando registros...")
 
@@ -178,7 +158,8 @@ execute_batch(
         precio_max,
         precio_promedio
 
-    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    )
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """,
     rows,
     page_size=1000
@@ -186,11 +167,34 @@ execute_batch(
 
 conn.commit()
 
-print("✅ Carga completada")
+print("✅ Datos insertados")
 
-# =========================
+# ==========================================
+# ÍNDICES
+# ==========================================
+
+print("⚡ Creando índices...")
+
+cur.execute("""
+CREATE INDEX IF NOT EXISTS idx_articulo
+ON precios_sipsa(articulo)
+""")
+
+cur.execute("""
+CREATE INDEX IF NOT EXISTS idx_ciudad
+ON precios_sipsa(ciudad)
+""")
+
+cur.execute("""
+CREATE INDEX IF NOT EXISTS idx_fecha
+ON precios_sipsa(fecha)
+""")
+
+conn.commit()
+
+# ==========================================
 # CERRAR
-# =========================
+# ==========================================
 
 cur.close()
 conn.close()
