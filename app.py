@@ -110,22 +110,28 @@ def home():
 @app.route("/test")
 def test():
 
-    if client is None:
-
-        return jsonify({
-            "success": False,
-            "error": "Cliente SOAP no inicializado"
-        })
-
     try:
 
-        # probar con parámetro simple
-        result = client.service.consultarInsumosSipsaMesMadr(1)
+        result = client.service.promediosSipsaParcial()
+
+        first_item = None
+
+        for item in result:
+
+            first_item = item
+            break
+
+        if first_item is None:
+
+            return jsonify({
+                "success": False,
+                "error": "No se encontraron registros"
+            })
 
         return jsonify({
             "success": True,
-            "type": str(type(result)),
-            "data": str(result)[:3000]
+            "type": str(type(first_item)),
+            "data": str(first_item)
         })
 
     except Exception as e:
@@ -134,7 +140,6 @@ def test():
             "success": False,
             "error": str(e)
         })
-
 # -----------------------------------
 # DEBUG INFO
 # -----------------------------------
