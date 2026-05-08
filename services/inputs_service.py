@@ -6,8 +6,7 @@ BASE_URL = "https://www.datos.gov.co/resource/gwbi-fnzs.json"
 def get_inputs_data(limit=20):
 
     params = {
-        "$limit": limit,
-        "$order": "a_o DESC"
+        "$limit": limit
     }
 
     response = requests.get(
@@ -17,6 +16,7 @@ def get_inputs_data(limit=20):
     )
 
     if response.status_code != 200:
+        print(response.text)
         return None
 
     data = response.json()
@@ -25,15 +25,6 @@ def get_inputs_data(limit=20):
 
     for item in data:
 
-        results.append({
-
-            "producto": item.get("producto"),
-            "categoria": item.get("subgrupo"),
-            "precio": item.get("precio_promedio"),
-            "departamento": item.get("departamento"),
-            "municipio": item.get("municipio"),
-            "fecha": item.get("a_o")
-
-        })
+        results.append(item)
 
     return results
