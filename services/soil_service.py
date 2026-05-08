@@ -22,7 +22,7 @@ SOIL_LAYERS = {
 
 def get_single_soil_value(lat, lon, map_file, coverage_id):
 
-    delta = 0.001
+    delta = 0.01
 
     min_lon = lon - delta
     max_lon = lon + delta
@@ -30,24 +30,23 @@ def get_single_soil_value(lat, lon, map_file, coverage_id):
     min_lat = lat - delta
     max_lat = lat + delta
 
-    params = {
-        "map": map_file,
-        "SERVICE": "WCS",
-        "VERSION": "2.0.1",
-        "REQUEST": "GetCoverage",
-        "COVERAGEID": coverage_id,
-        "FORMAT": "GEOTIFF_FLOAT32",
-        "SUBSET": [
-            f"long({min_lon},{max_lon})",
-            f"lat({min_lat},{max_lat})"
-        ]
-    }
+    params = [
+        ("map", map_file),
+        ("SERVICE", "WCS"),
+        ("VERSION", "2.0.1"),
+        ("REQUEST", "GetCoverage"),
+        ("COVERAGEID", coverage_id),
+        ("FORMAT", "image/tiff"),
+        ("SUBSETTINGCRS", "http://www.opengis.net/def/crs/EPSG/0/4326"),
+        ("OUTPUTCRS", "http://www.opengis.net/def/crs/EPSG/0/4326"),
+        ("SUBSET", f"Lon({min_lon},{max_lon})"),
+        ("SUBSET", f"Lat({min_lat},{max_lat})")
+    ]
 
-    response = requests.get(
-        WCS_BASE_URL,
-        params=params,
-        timeout=60
-    )
+    response = requests.get(WCS_BASE_URL, params=params, timeout=60)
+    print(response.url)
+    print(response.status_code)
+    print(response.text[:500])
 
     if response.status_code != 200:
         print("STATUS ERROR:", response.status_code)
