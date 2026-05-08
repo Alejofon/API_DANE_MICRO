@@ -34,7 +34,7 @@ def get_db_connection():
 def home():
     return jsonify({
         "success": True,
-        "message": "API DANE - Precios SIPSA",
+        "message": "API MISIEMBRA -  DATOAS AGRICOLAS DE COLOMBIA",
         "endpoints": {
             "productos": "/productos",
             "productos_con_precios": "/productos?precio_min=1000&precio_max=5000",
