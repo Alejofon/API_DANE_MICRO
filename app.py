@@ -7,6 +7,7 @@ from datetime import datetime
 from services.clima_service import get_climate_data
 from services.inputs_service import get_inputs_data
 from services.soil_service import get_soil_data
+from services.inputs_service import get_inputs_index
 
 # -----------------------------------
 # CONFIG FLASK
@@ -372,23 +373,30 @@ def climate_data():
 # INPUTS DATA
 # -----------------------------------
 
+# -----------------------------------
+# INPUTS DATA
+# -----------------------------------
+
 @app.route("/inputs")
 def inputs_data():
-
     try:
+        result = get_inputs_index(limit=1)
 
-        limit = request.args.get("limit", 20, type=int)
-
-        data = get_inputs_data(limit)
+        if not result:
+            return jsonify({
+                "success": False,
+                "error": "No se pudo obtener información del índice de insumos"
+            }), 500
 
         return jsonify({
             "success": True,
-            "total": len(data),
-            "data": data
+            "source": "datos.gov.co/gwbi-fnzs",
+            "context": result["context"],
+            "data": result["data"],
+            "highlights": result["highlights"]
         })
 
     except Exception as e:
-
         return jsonify({
             "success": False,
             "error": str(e)
