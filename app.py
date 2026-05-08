@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
+from services.soil_service import get_soil_data
 
 # -----------------------------------
 # CONFIG FLASK
@@ -142,162 +143,6 @@ def listar_productos():
 # BUSCAR PRODUCTO ESPECÍFICO
 # -----------------------------------
 
-@app.route("/producto/<nombre>")
-def buscar_producto(nombre):
-    """Busca un producto específico con su evolución de precios"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Información general del producto
-        cursor.execute("""
-            SELECT 
-                arti_nombre as producto,
-                grup_nombre as grupo,
-                COUNT(*) as total_registros,
-                MIN(enma_fecha) as primera_fecha,
-                MAX(enma_fecha) as ultima_fecha,
-                MIN(promedio_kg) as precio_minimo_historico,
-                MAX(promedio_kg) as precio_maximo_historico,
-                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio_historico
-            FROM dane_normalizado
-            WHERE arti_nombre ILIKE %s
-            GROUP BY arti_nombre, grup_nombre
-        """, (f"%{nombre}%",))
-        
-        info_producto = cursor.fetchone()
-        
-        if not info_producto:
-            cursor.close()
-            conn.close()
-            return jsonify({
-                "success": False,
-                "message": f"No se encontró el producto: {nombre}"
-            }), 404
-        
-        # Evolución de precios por fecha
-        cursor.execute("""
-            SELECT 
-                enma_fecha as fecha,
-                dept_nombre as departamento,
-                muni_nombre as municipio,
-                fuen_nombre as fuente,
-                minimo_kg as precio_minimo,
-                maximo_kg as precio_maximo,
-                promedio_kg as precio_promedio
-            FROM dane_normalizado
-            WHERE arti_nombre ILIKE %s
-            ORDER BY enma_fecha DESC, promedio_kg DESC
-            LIMIT 50
-        """, (f"%{nombre}%",))
-        
-        evolucion = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "success": True,
-            "informacion_general": info_producto,
-            "ultimos_precios": evolucion
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-# -----------------------------------
-# LISTAR DEPARTAMENTOS
-# -----------------------------------
-
-@app.route("/departamentos")
-def listar_departamentos():
-    """Lista todos los departamentos con estadísticas"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        cursor.execute("""
-            SELECT 
-                dept_nombre as departamento,
-                COUNT(DISTINCT arti_nombre) as total_productos,
-                COUNT(*) as total_registros,
-                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio_general,
-                MIN(enma_fecha) as fecha_primer_registro,
-                MAX(enma_fecha) as fecha_ultimo_registro
-            FROM dane_normalizado
-            WHERE dept_nombre IS NOT NULL
-            GROUP BY dept_nombre
-            ORDER BY dept_nombre
-        """)
-        
-        results = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "success": True,
-            "total": len(results),
-            "data": results
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-# -----------------------------------
-# DEPARTAMENTO ESPECÍFICO
-# -----------------------------------
-
-@app.route("/departamento/<nombre>")
-def buscar_departamento(nombre):
-    """Obtiene información de un departamento específico"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        cursor.execute("""
-            SELECT 
-                d.dept_nombre as departamento,
-                d.arti_nombre as producto,
-                d.grup_nombre as grupo,
-                AVG(d.promedio_kg)::NUMERIC(10,2) as precio_promedio,
-                MIN(d.promedio_kg) as precio_minimo,
-                MAX(d.promedio_kg) as precio_maximo,
-                COUNT(*) as registros,
-                MAX(d.enma_fecha) as ultima_actualizacion
-            FROM dane_normalizado d
-            WHERE d.dept_nombre ILIKE %s
-            GROUP BY d.dept_nombre, d.arti_nombre, d.grup_nombre
-            ORDER BY d.arti_nombre
-            LIMIT 100
-        """, (f"%{nombre}%",))
-        
-        results = cursor.fetchall()
-        
-        if not results:
-            cursor.close()
-            conn.close()
-            return jsonify({
-                "success": False,
-                "message": f"No se encontró el departamento: {nombre}"
-            }), 404
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            "success": True,
-            "departamento": nombre,
-            "total_productos": len(results),
-            "data": results
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-# -----------------------------------
-# LISTAR GRUPOS
-# -----------------------------------
 
 @app.route("/grupos")
 def listar_grupos():
@@ -447,66 +292,43 @@ def consultar_por_fecha(fecha):
         }), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
+    
 # -----------------------------------
-# RANGO DE FECHAS
+# SOIL DATA
 # -----------------------------------
 
-@app.route("/rango-fechas")
-def rango_fechas():
-    """Consulta precios en un rango de fechas"""
+@app.route("/soil")
+def soil_data():
+
     try:
-        fecha_inicio = request.args.get('inicio')
-        fecha_fin = request.args.get('fin')
-        
-        if not fecha_inicio or not fecha_fin:
+
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+
+        if lat is None or lon is None:
             return jsonify({
                 "success": False,
-                "error": "Se requieren los parámetros 'inicio' y 'fin'"
+                "error": "Debe enviar lat y lon"
             }), 400
-        
-        # Validar fechas
-        datetime.strptime(fecha_inicio, '%Y-%m-%d')
-        datetime.strptime(fecha_fin, '%Y-%m-%d')
-        
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        cursor.execute("""
-            SELECT 
-                enma_fecha as fecha,
-                COUNT(DISTINCT arti_nombre) as total_productos,
-                AVG(promedio_kg)::NUMERIC(10,2) as precio_promedio,
-                MIN(promedio_kg) as precio_minimo,
-                MAX(promedio_kg) as precio_maximo
-            FROM dane_normalizado
-            WHERE enma_fecha BETWEEN %s AND %s
-            GROUP BY enma_fecha
-            ORDER BY enma_fecha
-        """, (fecha_inicio, fecha_fin))
-        
-        results = cursor.fetchall()
-        
-        cursor.close()
-        conn.close()
-        
+
+        soil = get_soil_data(lat, lon)
+
         return jsonify({
             "success": True,
-            "rango": {
-                "inicio": fecha_inicio,
-                "fin": fecha_fin
+            "coordinates": {
+                "lat": lat,
+                "lon": lon
             },
-            "total_fechas": len(results),
-            "data": results
+            "soil_data": soil
         })
-        
-    except ValueError:
+
+    except Exception as e:
+
         return jsonify({
             "success": False,
-            "error": "Formato de fecha inválido. Use YYYY-MM-DD"
-        }), 400
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+            "error": str(e)
+        }), 500
+
 
 # -----------------------------------
 # START APP

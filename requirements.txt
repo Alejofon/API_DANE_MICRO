@@ -7,3 +7,4 @@ lxml==5.2.2
 psycopg2-binary==2.9.9
 pandas==2.2.2
 python-dotenv==1.2.1
+owslib==0.31.0
