@@ -1,5 +1,6 @@
 import requests
-from xml.etree import ElementTree as ET
+import tempfile
+import rasterio
 
 WCS_BASE_URL = "https://maps.isric.org/mapserv"
 
@@ -27,17 +28,17 @@ def get_single_soil_value(lat, lon, map_file, coverage_id):
         "VERSION": "2.0.1",
         "REQUEST": "GetCoverage",
         "COVERAGEID": coverage_id,
+        "FORMAT": "GEOTIFF_FLOAT32",
         "SUBSET": [
             f"long({lon},{lon})",
             f"lat({lat},{lat})"
-        ],
-        "FORMAT": "text/xml"
+        ]
     }
 
     response = requests.get(
         WCS_BASE_URL,
         params=params,
-        timeout=30
+        timeout=60
     )
 
     if response.status_code != 200:
@@ -45,22 +46,24 @@ def get_single_soil_value(lat, lon, map_file, coverage_id):
 
     try:
 
-        root = ET.fromstring(response.text)
+        with tempfile.NamedTemporaryFile(suffix=".tif") as tmp:
 
-        text_content = "".join(root.itertext())
+            tmp.write(response.content)
+            tmp.flush()
 
-        numbers = [
-            float(x)
-            for x in text_content.replace(",", " ").split()
-            if x.replace(".", "", 1).replace("-", "", 1).isdigit()
-        ]
+            with rasterio.open(tmp.name) as dataset:
 
-        if numbers:
-            return numbers[-1]
+                band = dataset.read(1)
 
-        return None
+                value = float(band[0][0])
 
-    except Exception:
+                if value < -9990:
+                    return None
+
+                return value
+
+    except Exception as e:
+        print("SOIL ERROR:", str(e))
         return None
 
 
