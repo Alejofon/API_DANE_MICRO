@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
+from services.clima_service import get_climate_data
 from services.soil_service import get_soil_data
 
 # -----------------------------------
@@ -329,6 +330,42 @@ def soil_data():
             "error": str(e)
         }), 500
 
+# -----------------------------------
+# CLIMATE DATA
+# -----------------------------------
+
+@app.route("/climate")
+def climate_data():
+
+    try:
+
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+
+        if lat is None or lon is None:
+
+            return jsonify({
+                "success": False,
+                "error": "Debe enviar lat y lon"
+            }), 400
+
+        climate = get_climate_data(lat, lon)
+
+        return jsonify({
+            "success": True,
+            "coordinates": {
+                "lat": lat,
+                "lon": lon
+            },
+            "climate_data": climate
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 # -----------------------------------
 # START APP
