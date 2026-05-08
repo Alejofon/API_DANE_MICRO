@@ -22,6 +22,14 @@ SOIL_LAYERS = {
 
 def get_single_soil_value(lat, lon, map_file, coverage_id):
 
+    delta = 0.001
+
+    min_lon = lon - delta
+    max_lon = lon + delta
+
+    min_lat = lat - delta
+    max_lat = lat + delta
+
     params = {
         "map": map_file,
         "SERVICE": "WCS",
@@ -30,8 +38,8 @@ def get_single_soil_value(lat, lon, map_file, coverage_id):
         "COVERAGEID": coverage_id,
         "FORMAT": "GEOTIFF_FLOAT32",
         "SUBSET": [
-            f"long({lon},{lon})",
-            f"lat({lat},{lat})"
+            f"long({min_lon},{max_lon})",
+            f"lat({min_lat},{max_lat})"
         ]
     }
 
@@ -42,6 +50,7 @@ def get_single_soil_value(lat, lon, map_file, coverage_id):
     )
 
     if response.status_code != 200:
+        print("STATUS ERROR:", response.status_code)
         return None
 
     try:
@@ -55,14 +64,15 @@ def get_single_soil_value(lat, lon, map_file, coverage_id):
 
                 band = dataset.read(1)
 
-                value = float(band[0][0])
+                value = float(band.mean())
 
                 if value < -9990:
                     return None
 
-                return value
+                return round(value, 2)
 
     except Exception as e:
+
         print("SOIL ERROR:", str(e))
         return None
 
