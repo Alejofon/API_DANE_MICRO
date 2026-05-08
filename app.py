@@ -5,6 +5,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
 from services.clima_service import get_climate_data
+from services.inputs_service import get_inputs_data
 from services.soil_service import get_soil_data
 
 # -----------------------------------
@@ -358,6 +359,32 @@ def climate_data():
                 "lon": lon
             },
             "climate_data": climate
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+# -----------------------------------
+# INPUTS DATA
+# -----------------------------------
+
+@app.route("/inputs")
+def inputs_data():
+
+    try:
+
+        limit = request.args.get("limit", 20, type=int)
+
+        data = get_inputs_data(limit)
+
+        return jsonify({
+            "success": True,
+            "total": len(data),
+            "data": data
         })
 
     except Exception as e:
