@@ -5,7 +5,6 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
 from services.clima_service import get_climate_data
-from services.inputs_service import get_inputs_data
 from services.soil_service import get_soil_data
 from services.inputs_service import get_inputs_index
 
@@ -368,10 +367,6 @@ def climate_data():
             "success": False,
             "error": str(e)
         }), 500
-
-# -----------------------------------
-# INPUTS DATA
-# -----------------------------------
 
 # -----------------------------------
 # INPUTS DATA
