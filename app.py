@@ -397,6 +397,204 @@ def inputs_data():
             "error": str(e)
         }), 500
 
+@app.route("/analisis-terreno")
+def analisis_terreno():
+    """
+    Endpoint unificado para la app móvil.
+    Recibe: lat, lon, departamento, municipio.
+    Retorna: clima, suelo, índice de insumos y estadísticas de precios DANE
+    para los tres grupos de interés.
+    """
+    try:
+        # --- Obtener parámetros ---
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+        departamento = request.args.get("departamento", "").strip().upper()
+        municipio = request.args.get("municipio", "").strip().upper()
+
+        if lat is None or lon is None or not departamento:
+            return jsonify({
+                "success": False,
+                "error": "Se requieren lat, lon y departamento"
+            }), 400
+
+        # ---------------------------------------------------
+        # 1. Clima (usa el servicio existente)
+        # ---------------------------------------------------
+        climate = get_climate_data(lat, lon)
+        if climate is None:
+            climate = {"error": "No se pudo obtener datos climáticos"}
+
+        # ---------------------------------------------------
+        # 2. Suelo (usa el servicio existente)
+        # ---------------------------------------------------
+        soil = get_soil_data(lat, lon)
+        if soil is None:
+            soil = {"error": "No se pudo obtener datos de suelo"}
+
+        # ---------------------------------------------------
+        # 3. Índice de insumos (usa el servicio existente)
+        # ---------------------------------------------------
+        inputs_result = get_inputs_index(limit=1)
+        if not inputs_result:
+            inputs_result = {"error": "No se pudo obtener el índice de insumos"}
+
+        # ---------------------------------------------------
+        # 4. Precios DANE específicos del departamento/municipio
+        #    y los tres grupos de interés
+        # ---------------------------------------------------
+        grupos_interes = [
+            "FRUTAS",
+            "TUBERCULOS, RAICES Y PLATANOS",
+            "VERDURAS Y HORTALIZAS"
+        ]
+
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        precios_por_grupo = {}
+
+        for grupo in grupos_interes:
+            # Construir consulta para el grupo
+            query = """
+                WITH productos_stats AS (
+                    SELECT 
+                        arti_nombre,
+                        grup_nombre,
+                        AVG(promedio_kg) as precio_promedio,
+                        MIN(promedio_kg) as precio_min,
+                        MAX(promedio_kg) as precio_max,
+                        COUNT(*) as num_registros,
+                        MIN(enma_fecha) as fecha_inicio,
+                        MAX(enma_fecha) as fecha_fin
+                    FROM dane_normalizado
+                    WHERE grup_nombre = %s
+                      AND dept_nombre ILIKE %s
+            """
+            params = [grupo, departamento]
+
+            if municipio:
+                query += " AND muni_nombre ILIKE %s"
+                params.append(municipio)
+
+            query += """
+                    GROUP BY arti_nombre, grup_nombre
+                )
+                SELECT *,
+                       RANK() OVER (ORDER BY precio_promedio DESC) as rank_caro,
+                       RANK() OVER (ORDER BY precio_promedio ASC) as rank_barato
+                FROM productos_stats
+                ORDER BY precio_promedio DESC
+            """
+
+            cursor.execute(query, params)
+            productos = cursor.fetchall()
+
+            # Calcular estadísticas generales para el grupo
+            if productos:
+                precio_promedio_grupo = sum(p["precio_promedio"] for p in productos) / len(productos)
+                producto_mas_caro = productos[0]  # ya ordenado desc
+                producto_mas_barato = productos[-1]
+                # Top 3 caros y top 3 baratos
+                top_caros = productos[:3]
+                # Los más baratos (últimos 3, podrían estar en orden inverso)
+                productos_asc = sorted(productos, key=lambda x: x["precio_promedio"])
+                top_baratos = productos_asc[:3]
+            else:
+                precio_promedio_grupo = None
+                producto_mas_caro = None
+                producto_mas_barato = None
+                top_caros = []
+                top_baratos = []
+
+            precios_por_grupo[grupo] = {
+                "estadisticas": {
+                    "total_productos": len(productos),
+                    "precio_promedio_grupo": round(precio_promedio_grupo, 2) if precio_promedio_grupo is not None else None,
+                    "producto_mas_caro": producto_mas_caro["arti_nombre"] if producto_mas_caro else None,
+                    "precio_mas_caro": round(producto_mas_caro["precio_promedio"], 2) if producto_mas_caro else None,
+                    "producto_mas_barato": producto_mas_barato["arti_nombre"] if producto_mas_barato else None,
+                    "precio_mas_barato": round(producto_mas_barato["precio_promedio"], 2) if producto_mas_barato else None,
+                    "fecha_inicio_global": productos[0]["fecha_inicio"] if productos else None,
+                    "fecha_fin_global": productos[0]["fecha_fin"] if productos else None
+                },
+                "productos_mas_caros": [
+                    {
+                        "producto": p["arti_nombre"],
+                        "precio_promedio": round(p["precio_promedio"], 2),
+                        "unidad": "COP/kg"
+                    } for p in top_caros
+                ],
+                "productos_mas_baratos": [
+                    {
+                        "producto": p["arti_nombre"],
+                        "precio_promedio": round(p["precio_promedio"], 2),
+                        "unidad": "COP/kg"
+                    } for p in top_baratos
+                ]
+            }
+
+        cursor.close()
+        conn.close()
+
+        # ---------------------------------------------------
+        # Construir la respuesta unificada con CONTEXTO
+        # ---------------------------------------------------
+        respuesta = {
+            "success": True,
+            "metadata": {
+                "timestamp": datetime.utcnow().isoformat(),
+                "endpoint": "/analisis-terreno"
+            },
+            "location": {
+                "lat": lat,
+                "lon": lon,
+                "departamento": departamento,
+                "municipio": municipio if municipio else "No especificado"
+            },
+            "contexto_general": (
+                "Información consolidada para la evaluación de cultivos. "
+                "Incluye clima, suelo, índice de precios de insumos (nacional) y "
+                "precios de mercado del DANE para los tres principales grupos de alimentos "
+                "en el departamento/municipio indicado. Los precios están en COP/kg."
+            ),
+            "clima": {
+                "context": (
+                    "Datos actuales y pronóstico diario de variables meteorológicas relevantes "
+                    "para la agricultura: temperatura, humedad relativa, precipitación, viento "
+                    "y evapotranspiración de referencia (ET₀). Fuente: Open-Meteo (open-meteo.com). "
+                    "Unidades: °C, %, mm, km/h."
+                ),
+                "data": climate
+            },
+            "suelo": {
+                "context": (
+                    "Propiedades del suelo superficial (0-5 cm) según ISRIC SoilGrids vía WCS. "
+                    "Los valores representan pH en H₂O, contenido de arcilla (%) y arena (%). "
+                    "Valores nulos indican datos no disponibles o máscara (por ej., cuerpos de agua)."
+                ),
+                "data": soil
+            },
+            "insumos": {
+                "context": inputs_result.get("context", {}),
+                "data": inputs_result.get("highlights", inputs_result.get("data", {}))
+            },
+            "precios_mercado": {
+                "context": (
+                    "Precios de venta minorista recolectados por el DANE en centrales mayoristas. "
+                    "Se presentan estadísticas por grupo de producto para el departamento/municipio seleccionado. "
+                    "Los valores (COP/kg) son promedios históricos en el rango de fechas disponible. "
+                    "Esta información ayuda al modelo a evaluar la rentabilidad potencial de los cultivos."
+                ),
+                "por_grupo": precios_por_grupo
+            }
+        }
+
+        return jsonify(respuesta)
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 # -----------------------------------
 # START APP
 # -----------------------------------
