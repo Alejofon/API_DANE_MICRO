@@ -7,6 +7,8 @@ from datetime import datetime
 from services.clima_service import get_climate_data
 from services.soil_service import get_soil_data
 from services.inputs_service import get_inputs_index
+import requests
+from flask import jsonify, request
 
 # -----------------------------------
 # CONFIG FLASK
@@ -36,15 +38,7 @@ def home():
         "success": True,
         "message": "API MISIEMBRA -  DATOAS AGRICOLAS DE COLOMBIA",
         "endpoints": {
-            "productos": "/productos",
-            "productos_con_precios": "/productos?precio_min=1000&precio_max=5000",
-            "producto_especifico": "/producto/aguacate",
-            "departamentos": "/departamentos",
-            "departamento_especifico": "/departamento/BOGOTA",
-            "grupos": "/grupos",
-            "estadisticas": "/estadisticas",
-            "fecha_especifica": "/fecha/2024-01-01",
-            "rango_fechas": "/rango-fechas?inicio=2024-01-01&fin=2024-12-31"
+            
         }
     })
 
@@ -595,6 +589,90 @@ def analisis_terreno():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+# -----------------------------------
+# BUSCAR INSUMOS AGRÍCOLAS CERCANOS (GOOGLE PLACES)
+# -----------------------------------   
+
+@app.route("/buscar-insumos")
+def buscar_insumos():
+    """
+    Busca tiendas de insumos agrícolas cerca de una ubicación.
+    Recibe lat, lon y radio (opcional).
+    """
+    try:
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+        if lat is None or lon is None:
+            return jsonify({"success": False, "error": "Se requieren lat y lon"}), 400
+
+        # Llamar a la nueva función de servicio
+        resultado = buscar_proveedores_cercanos(lat, lon)
+        return jsonify(resultado)
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# En services/google_places_service.py (o directamente en app.py)
+import os
+
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
+
+def buscar_proveedores_cercanos(lat, lon, radio_inicial=50000):
+    """
+    Busca proveedores de insumos agrícolas con búsqueda progresiva.
+    """
+    # 1. Configurar la búsqueda
+    url = "https://places.googleapis.com/v1/places:searchNearby"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.types,places.rating,places.googleMapsUri"
+    }
+
+    tipos_insumos = ["garden_center", "hardware_store", "store", "farm"] # Tipos de lugares a buscar
+
+    # 2. Búsqueda inicial en un radio de 50 km
+    print(f"Buscando proveedores en {radio_inicial/1000} km a la redonda...")
+    lugares = _realizar_busqueda(url, headers, lat, lon, radio_inicial, tipos_insumos)
+
+    # 3. Si no hay resultados, ampliar a 100 km
+    if not lugares:
+        print(f"Sin resultados. Ampliando búsqueda a {100} km...")
+        lugares = _realizar_busqueda(url, headers, lat, lon, 100000, tipos_insumos)
+
+    # 4. Formatear la respuesta
+    if not lugares:
+        return {"success": True, "total": 0, "data": [], "mensaje": "No se encontraron proveedores cercanos. Intente buscar en la cabecera municipal más próxima."}
+
+    proveedores = [{
+        "nombre": lugar.get("displayName", {}).get("text", "Nombre no disponible"),
+        "direccion": lugar.get("formattedAddress", "Dirección no disponible"),
+        "maps_link": lugar.get("googleMapsUri", "#"),
+        "coordenadas": lugar.get("location", {})
+    } for lugar in lugares[:5]]  # Limitamos a 5 resultados
+
+    return {"success": True, "total": len(proveedores), "data": proveedores}
+
+def _realizar_busqueda(url, headers, lat, lon, radio, tipos):
+    """Realiza una petición a la API de Google Places."""
+    payload = {
+        "includedTypes": tipos,
+        "maxResultCount": 5,
+        "locationRestriction": {
+            "circle": {
+                "center": {"latitude": lat, "longitude": lon},
+                "radius": float(radio)
+            }
+        }
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json().get("places", [])
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la búsqueda de Google Places: {e}")
+        return []
 # -----------------------------------
 # START APP
 # -----------------------------------
