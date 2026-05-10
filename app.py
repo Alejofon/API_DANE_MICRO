@@ -615,7 +615,7 @@ def _buscar_con_texto(lat, lon, radius):
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": PLACES_API_KEY,
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         # Agregamos 'reviews' y 'rating' por si quieres mostrar esa info después
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.location,places.rating"
     }
