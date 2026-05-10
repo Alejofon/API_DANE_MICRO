@@ -595,27 +595,6 @@ def analisis_terreno():
 # BUSCAR INSUMOS AGRÍCOLAS CERCANOS (GOOGLE PLACES)
 # -----------------------------------   
 
-@app.route("/buscar-insumos")
-def buscar_insumos():
-    """
-    Busca tiendas de insumos agrícolas cerca de una ubicación.
-    Recibe lat, lon y radio (opcional).
-    """
-    try:
-        lat = request.args.get("lat", type=float)
-        lon = request.args.get("lon", type=float)
-        if lat is None or lon is None:
-            return jsonify({"success": False, "error": "Se requieren lat y lon"}), 400
-
-        # Llamar a la nueva función de servicio
-        resultado = buscar_proveedores_cercanos(lat, lon)
-        return jsonify(resultado)
-
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-# En services/google_places_service.py (o directamente en app.py)
-import os
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 
