@@ -628,7 +628,7 @@ def _buscar_con_texto(lat, lon, radio):
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.googleMapsUri"
     }
     payload = {
-        "textQuery": "agropecuaria OR insumos agrícolas OR semillas OR fertilizantes",
+        "textQuery": "agropecuaria OR insumos agrícolas OR semillas OR fertilizantes or agro",
         "locationBias": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
@@ -677,7 +677,7 @@ def buscar_proveedores_cercanos(lat, lon):
     lugares = _buscar_con_texto(lat, lon, 100000)
     if not lugares:
         # 2. Probamos nearby con tipos muy generales (store, point_of_interest)
-        lugares = _buscar_nearby(lat, lon, 100000, ["store", "point_of_interest"])
+        lugares = _buscar_nearby(lat, lon, 100000, ["agro", "agropecuario", "semillas","insumos agricolas","agricola"])
     if not lugares:
         # 3. Ampliamos a 200 km con texto
         lugares = _buscar_con_texto(lat, lon, 200000)
