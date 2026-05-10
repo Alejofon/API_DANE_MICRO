@@ -10,6 +10,7 @@ from services.inputs_service import get_inputs_index
 import requests
 from flask import jsonify, request
 
+
 # -----------------------------------
 # CONFIG FLASK
 # -----------------------------------
@@ -697,18 +698,7 @@ def buscar_proveedores_cercanos(lat, lon):
 
     return {"success": True, "total": len(proveedores), "data": proveedores}
 
-# Endpoint (se mantiene igual)
-@app.route("/buscar-insumos")
-def buscar_insumos():
-    try:
-        lat = request.args.get("lat", type=float)
-        lon = request.args.get("lon", type=float)
-        if lat is None or lon is None:
-            return jsonify({"success": False, "error": "Faltan coordenadas"}), 400
-        resultado = buscar_proveedores_cercanos(lat, lon)
-        return jsonify(resultado)
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+
 # -----------------------------------
 # START APP
 # -----------------------------------
