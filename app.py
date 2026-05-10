@@ -601,34 +601,79 @@ GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 # FUNCIONES INTERNAS DE BÚSQUEDA (CORREGIDAS)
 # -----------------------------------
 
+KEYWORDS_AGRO = [
+    "agro", "semilla", "fertilizante", "insumo", "agricola", "agropecuaria", 
+    "veterinaria", "finca", "campo", "abono", "pasto", "ganado", "cultivo", "riego"
+]
+
+def _es_negocio_valido(nombre):
+    """Verifica si el nombre del negocio contiene palabras relacionadas al agro"""
+    nombre_min = nombre.lower()
+    return any(keyword in nombre_min for keyword in KEYWORDS_AGRO)
+
 def _buscar_con_texto(lat, lon, radius):
-    """Búsqueda por texto (v1): Necesaria para palabras clave como 'insumos'"""
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        # ERROR ENCONTRADO: Esta línea es OBLIGATORIA en la API nueva
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.location"
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
     }
+    
     payload = {
-        "textQuery": "insumos agricolas semillas agropecuaria",
+        # Cambiamos a una búsqueda más directa
+        "textQuery": "almacen de insumos agricolas y agropecuarios",
         "locationBias": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
                 "radius": float(radius)
             }
         },
-        "languageCode": "es"
+        "languageCode": "es",
+        "maxResultCount": 10  # Pedimos más para poder filtrar los malos
     }
 
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
-        # Si esto falla, imprimirá el error exacto en los logs de Render
-        r.raise_for_status() 
-        return r.json().get("places", [])
+        r.raise_for_status()
+        res_json = r.json()
+        lugares = res_json.get("places", [])
+        
+        # FILTRO CRÍTICO: Solo dejamos los que pasen la prueba de palabras clave
+        filtrados = [
+            l for l in lugares 
+            if _es_negocio_valido(l.get("displayName", {}).get("text", ""))
+        ]
+        return filtrados
     except Exception as e:
         print(f"Error en búsqueda texto: {e}")
         return []
+
+def buscar_proveedores_cercanos(lat, lon):
+    # Intentamos primero en un radio de 50km para ser precisos
+    lugares = _buscar_con_texto(lat, lon, 50000)
+    
+    # Si no hay nada, ampliamos a 100km
+    if not lugares:
+        lugares = _buscar_con_texto(lat, lon, 100000)
+
+    if not lugares:
+        return {
+            "success": True,
+            "total": 0,
+            "data": [],
+            "mensaje": "No se encontraron almacenes agropecuarios en esta zona."
+        }
+
+    proveedores = []
+    for lugar in lugares[:5]:
+        proveedores.append({
+            "nombre": lugar.get("displayName", {}).get("text", "Sin nombre"),
+            "direccion": lugar.get("formattedAddress", "Dirección no disponible"),
+            "maps_link": lugar.get("googleMapsUri", "")
+        })
+
+    return {"success": True, "total": len(proveedores), "data": proveedores}
+
 
 def _buscar_nearby(lat, lon, radius, included_types):
     """Búsqueda cercana (v1): Usa tipos oficiales de Google"""
@@ -662,38 +707,7 @@ def _buscar_nearby(lat, lon, radius, included_types):
         print(f"Error en búsqueda nearby: {e}")
         return []
 
-def buscar_proveedores_cercanos(lat, lon):
-    """Lógica de cascada para asegurar resultados"""
-    # 1. Intentamos búsqueda por texto en 100km
-    lugares = _buscar_con_texto(lat, lon, 100000)
-    
-    if not lugares:
-        # 2. Si falla, probamos nearby con tipos que suelen vender insumos
-        # (Google no reconoce 'agro', usamos ferretería y tiendas generales)
-        lugares = _buscar_nearby(lat, lon, 50000, ["agrícola", "agro","agropecuario" "store"])
-    
-    if not lugares:
-        # 3. Último intento: Ampliamos búsqueda por texto a 200km
-        lugares = _buscar_con_texto(lat, lon, 200000)
 
-    if not lugares:
-        return {
-            "success": True,
-            "total": 0,
-            "data": [],
-            "mensaje": "No se encontraron proveedores cercanos en un radio amplio."
-        }
-
-    # Extraemos los datos para tu app
-    proveedores = []
-    for lugar in lugares[:5]:
-        proveedores.append({
-            "nombre": lugar.get("displayName", {}).get("text", "Sin nombre"),
-            "direccion": lugar.get("formattedAddress", "Dirección no disponible"),
-            "maps_link": lugar.get("googleMapsUri", "")
-        })
-
-    return {"success": True, "total": len(proveedores), "data": proveedores}
 
 @app.route("/buscar-insumos")
 def buscar_insumos():
