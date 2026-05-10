@@ -603,86 +603,102 @@ GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 
 KEYWORDS_AGRO = [
     "agro", "semilla", "fertilizante", "insumo", "agricola", "agropecuaria", 
-    "veterinaria", "finca", "campo", "abono", "pasto", "ganado", "cultivo", "riego"
+    "veterinaria", "finca", "campo", "abono", "pasto", "ganado", "cultivo", 
+    "riego", "cosecha", "concentrado", "bulto"
 ]
 
-def _es_negocio_valido(nombre):
-    """Verifica si el nombre del negocio contiene palabras relacionadas al agro"""
-    nombre_min = nombre.lower()
-    return any(keyword in nombre_min for keyword in KEYWORDS_AGRO)
+def _es_negocio_valido(lugar):
+    """Revisa el nombre y también las categorías de Google para no borrar locales reales"""
+    nombre = lugar.get("displayName", {}).get("text", "").lower()
+    # Revisamos también los 'types' que devuelve Google (ej: 'hardware_store')
+    tipos = lugar.get("types", [])
+    
+    # Si el nombre tiene algo de agro, es válido
+    if any(kw in nombre for kw in KEYWORDS_AGRO):
+        return True
+    
+    # Si Google lo categoriza como algo útil en el campo, también
+    categorias_utiles = ["hardware_store", "farm", "garden_center"]
+    if any(t in categorias_utiles for t in tipos):
+        return True
+        
+    return False
 
-def _buscar_con_texto(lat, lon, radius):
+def _buscar_con_texto(lat, lon, radius, estricto=False):
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        # Agregamos 'reviews' y 'rating' por si quieres mostrar esa info después
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.location,places.rating"
+        # IMPORTANTE: Agregamos 'places.types' para que el filtro funcione mejor
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.types"
     }
     
     payload = {
-        "textQuery": "insumos agricolas agropecuaria",
-        # RESTRICCIÓN: Obliga a buscar en este círculo primero
-        "locationRestriction": {
+        "textQuery": "agropecuaria insumos agricolas",
+        "languageCode": "es",
+        "maxResultCount": 20
+    }
+
+    # Si es búsqueda en el pueblo (estricto), usamos Restriction. 
+    # Si es regional, usamos Bias para que Google no se bloquee.
+    if estricto:
+        payload["locationRestriction"] = {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
                 "radius": float(radius)
             }
-        },
-        # PREFERENCIA: Ordenar por distancia, no por popularidad
-        "rankPreference": "DISTANCE",
-        "languageCode": "es",
-        "maxResultCount": 15
-    }
+        }
+        # Solo podemos usar DISTANCE si hay una restricción activa
+        payload["rankPreference"] = "DISTANCE"
+    else:
+        payload["locationBias"] = {
+            "circle": {
+                "center": {"latitude": lat, "longitude": lon},
+                "radius": float(radius)
+            }
+        }
 
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
         r.raise_for_status()
         lugares = r.json().get("places", [])
         
-        # Filtro de palabras clave para asegurar que sea Agro
-        filtrados = [
-            l for l in lugares 
-            if _es_negocio_valido(l.get("displayName", {}).get("text", ""))
-        ]
+        # Aplicamos el filtro de palabras agro
+        filtrados = [l for l in lugares if _es_negocio_valido(l)]
         return filtrados
     except Exception as e:
-        print(f"Error en búsqueda texto: {e}")
+        print(f"Error en búsqueda: {e}")
         return []
 
 def buscar_proveedores_cercanos(lat, lon):
-    # PASO 1: Buscar MUY CERCA (5km) para capturar los negocios del pueblo (Turmequé)
-    # Al usar rankPreference: DISTANCE, los más cercanos saldrán de primero.
-    lugares = _buscar_con_texto(lat, lon, 5000)
+    # INTENTO 1: Turmequé (Radio de 5km, obligatorio estar cerca)
+    lugares = _buscar_con_texto(lat, lon, 5000, estricto=True)
     
-    # PASO 2: Si en el pueblo no hay nada, ampliamos a 20km (municipios vecinos)
+    # INTENTO 2: Si Turmequé falla por GPS, buscamos a 15km (municipios vecinos como Ventaquemada/Nuevo Colón)
     if not lugares:
-        lugares = _buscar_con_texto(lat, lon, 20000)
+        lugares = _buscar_con_texto(lat, lon, 15000, estricto=False)
         
-    # PASO 3: Si aún nada, radio regional de 50km
+    # INTENTO 3: Regional (50km)
     if not lugares:
-        lugares = _buscar_con_texto(lat, lon, 50000)
+        lugares = _buscar_con_texto(lat, lon, 50000, estricto=False)
 
     if not lugares:
         return {
             "success": True,
             "total": 0,
             "data": [],
-            "mensaje": "No se encontraron almacenes agropecuarios en su ubicación exacta."
+            "mensaje": "No se encontraron locales agropecuarios. Intente con otra ubicación."
         }
 
     proveedores = []
-    # Tomamos los 5 más cercanos
-    for lugar in lugares[:5]:
+    for lugar in lugares[:8]: # Mostramos hasta 8 para dar opciones
         proveedores.append({
             "nombre": lugar.get("displayName", {}).get("text", "Sin nombre"),
             "direccion": lugar.get("formattedAddress", "Dirección no disponible"),
-            "maps_link": lugar.get("googleMapsUri", ""),
-            "distancia_estimada": "Muy cerca" # Podrías calcular la distancia real con la lat/lon que devuelve
+            "maps_link": lugar.get("googleMapsUri", "")
         })
 
     return {"success": True, "total": len(proveedores), "data": proveedores}
-
 
 def _buscar_nearby(lat, lon, radius, included_types):
     """Búsqueda cercana (v1): Usa tipos oficiales de Google"""
