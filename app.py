@@ -620,22 +620,24 @@ import os
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 
 def _buscar_con_texto(lat, lon, radio):
-    """Búsqueda por texto: 'agropecuaria' o 'insumos agrícolas'"""
+    """Búsqueda por texto con Places API (New)"""
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.googleMapsUri"
+        # OBLIGATORIO para Places API (New): especifica los campos que quieres
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
     }
     payload = {
-        "textQuery": "agropecuaria OR insumos agrícolas OR semillas OR fertilizantes or agro",
+        "textQuery": "agropecuaria OR semillas OR fertilizantes OR insumos agrícolas",
         "locationBias": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
                 "radius": float(radio)
             }
         },
-        "maxResultCount": 10
+        "maxResultCount": 10,
+        "languageCode": "es"
     }
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
@@ -646,12 +648,12 @@ def _buscar_con_texto(lat, lon, radio):
         return []
 
 def _buscar_nearby(lat, lon, radio, tipos):
-    """Búsqueda nearby con los tipos dados"""
+    """Búsqueda por cercanía con Places API (New)"""
     url = "https://places.googleapis.com/v1/places:searchNearby"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.googleMapsUri"
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
     }
     payload = {
         "includedTypes": tipos,
@@ -661,7 +663,8 @@ def _buscar_nearby(lat, lon, radio, tipos):
                 "center": {"latitude": lat, "longitude": lon},
                 "radius": float(radio)
             }
-        }
+        },
+        "languageCode": "es"
     }
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
@@ -673,13 +676,13 @@ def _buscar_nearby(lat, lon, radio, tipos):
 
 def buscar_proveedores_cercanos(lat, lon):
     lugares = []
-    # 1. Búsqueda por texto en 100 km (la más efectiva para zonas rurales)
+    # 1. Text search en 100 km
     lugares = _buscar_con_texto(lat, lon, 100000)
     if not lugares:
-        # 2. Probamos nearby con tipos muy generales (store, point_of_interest)
-        lugares = _buscar_nearby(lat, lon, 100000, ["agro", "agropecuario", "semillas","insumos agricolas","agricola"])
+        # 2. Nearby con tipos genéricos
+        lugares = _buscar_nearby(lat, lon, 100000, ["store", "garden_center", "hardware_store"])
     if not lugares:
-        # 3. Ampliamos a 200 km con texto
+        # 3. Text search ampliado a 200 km
         lugares = _buscar_con_texto(lat, lon, 200000)
 
     if not lugares:
@@ -698,6 +701,17 @@ def buscar_proveedores_cercanos(lat, lon):
 
     return {"success": True, "total": len(proveedores), "data": proveedores}
 
+@app.route("/buscar-insumos")
+def buscar_insumos():
+    try:
+        lat = request.args.get("lat", type=float)
+        lon = request.args.get("lon", type=float)
+        if lat is None or lon is None:
+            return jsonify({"success": False, "error": "Faltan coordenadas"}), 400
+        resultado = buscar_proveedores_cercanos(lat, lon)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # -----------------------------------
 # START APP
