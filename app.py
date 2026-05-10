@@ -670,7 +670,7 @@ def buscar_proveedores_cercanos(lat, lon):
     if not lugares:
         # 2. Si falla, probamos nearby con tipos que suelen vender insumos
         # (Google no reconoce 'agro', usamos ferretería y tiendas generales)
-        lugares = _buscar_nearby(lat, lon, 50000, ["hardware_store", "home_goods_store", "store"])
+        lugares = _buscar_nearby(lat, lon, 50000, ["agrícola", "agro","agropecuario" "store"])
     
     if not lugares:
         # 3. Último intento: Ampliamos búsqueda por texto a 200km
