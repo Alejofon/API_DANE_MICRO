@@ -597,22 +597,21 @@ def analisis_terreno():
 
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
+# -----------------------------------
+# FUNCIONES INTERNAS DE BÚSQUEDA (CORREGIDAS)
+# -----------------------------------
 
 def _buscar_con_texto(lat, lon, radius):
-    """
-    Búsqueda de texto (New Places API v1)
-    Es la más efectiva para encontrar 'Insumos agrícolas' por palabras clave.
-    """
+    """Búsqueda por texto (v1): Necesaria para palabras clave como 'insumos'"""
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        # OBLIGATORIO: Si no envías esta máscara, Google devuelve Error 400
+        "X-Goog-Api-Key": PLACES_API_KEY,
+        # ERROR ENCONTRADO: Esta línea es OBLIGATORIA en la API nueva
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.location"
     }
-    
     payload = {
-        "textQuery": "insumos agricolas agropecuaria semillas",
+        "textQuery": "insumos agricolas semillas agropecuaria",
         "locationBias": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
@@ -624,32 +623,32 @@ def _buscar_con_texto(lat, lon, radius):
 
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
-        r.raise_for_status()
-        # La respuesta ahora viene envuelta en un objeto 'places'
+        # Si esto falla, imprimirá el error exacto en los logs de Render
+        r.raise_for_status() 
         return r.json().get("places", [])
     except Exception as e:
-        print(f"Error en búsqueda por texto: {e}")
+        print(f"Error en búsqueda texto: {e}")
         return []
 
 def _buscar_nearby(lat, lon, radius, included_types):
-    """
-    Búsqueda cercana (New Places API v1)
-    Usa tipos predefinidos por Google.
-    """
+    """Búsqueda cercana (v1): Usa tipos oficiales de Google"""
     url = "https://places.googleapis.com/v1/places:searchNearby"
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+        "X-Goog-Api-Key": PLACES_API_KEY,
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
     }
     
-    # TIP: Google no reconoce 'agro'. Usamos tipos genéricos que suelen tener insumos.
+    # OJO: searchNearby tiene un límite máximo de 50000 (50km). 
+    # Si le pasas 100000, Google dará error.
+    radio_ajustado = min(float(radius), 50000.0)
+
     payload = {
-        "includedTypes": ["hardware_store", "home_goods_store", "store"], 
+        "includedTypes": included_types,
         "locationRestriction": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
-                "radius": float(radius)
+                "radius": radio_ajustado
             }
         },
         "languageCode": "es"
@@ -660,18 +659,21 @@ def _buscar_nearby(lat, lon, radius, included_types):
         r.raise_for_status()
         return r.json().get("places", [])
     except Exception as e:
-        print(f"Error en búsqueda cercana: {e}")
+        print(f"Error en búsqueda nearby: {e}")
         return []
 
 def buscar_proveedores_cercanos(lat, lon):
-    lugares = []
-    # 1. Text search en 100 km
+    """Lógica de cascada para asegurar resultados"""
+    # 1. Intentamos búsqueda por texto en 100km
     lugares = _buscar_con_texto(lat, lon, 100000)
+    
     if not lugares:
-        # 2. Nearby con tipos genéricos
-        lugares = _buscar_nearby(lat, lon, 100000, ["store", "garden_center", "hardware_store"])
+        # 2. Si falla, probamos nearby con tipos que suelen vender insumos
+        # (Google no reconoce 'agro', usamos ferretería y tiendas generales)
+        lugares = _buscar_nearby(lat, lon, 50000, ["hardware_store", "home_goods_store", "store"])
+    
     if not lugares:
-        # 3. Text search ampliado a 200 km
+        # 3. Último intento: Ampliamos búsqueda por texto a 200km
         lugares = _buscar_con_texto(lat, lon, 200000)
 
     if not lugares:
@@ -679,14 +681,17 @@ def buscar_proveedores_cercanos(lat, lon):
             "success": True,
             "total": 0,
             "data": [],
-            "mensaje": "No se encontraron proveedores cercanos. Intente buscar en la cabecera municipal más próxima."
+            "mensaje": "No se encontraron proveedores cercanos en un radio amplio."
         }
 
-    proveedores = [{
-        "nombre": lugar.get("displayName", {}).get("text", "Sin nombre"),
-        "direccion": lugar.get("formattedAddress", ""),
-        "maps_link": lugar.get("googleMapsUri", ""),
-    } for lugar in lugares[:5]]
+    # Extraemos los datos para tu app
+    proveedores = []
+    for lugar in lugares[:5]:
+        proveedores.append({
+            "nombre": lugar.get("displayName", {}).get("text", "Sin nombre"),
+            "direccion": lugar.get("formattedAddress", "Dirección no disponible"),
+            "maps_link": lugar.get("googleMapsUri", "")
+        })
 
     return {"success": True, "total": len(proveedores), "data": proveedores}
 
