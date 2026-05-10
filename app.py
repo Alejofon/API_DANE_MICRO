@@ -598,59 +598,69 @@ def analisis_terreno():
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 
-def _buscar_con_texto(lat, lon, radio):
-    """Búsqueda por texto con Places API (New)"""
+def _buscar_con_texto(lat, lon, radius):
+    """
+    Búsqueda de texto (New Places API v1)
+    Es la más efectiva para encontrar 'Insumos agrícolas' por palabras clave.
+    """
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-        # OBLIGATORIO para Places API (New): especifica los campos que quieres
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
+        # OBLIGATORIO: Si no envías esta máscara, Google devuelve Error 400
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.location"
     }
+    
     payload = {
-        "textQuery": "agropecuaria OR semillas OR fertilizantes OR insumos agrícolas",
+        "textQuery": "insumos agricolas agropecuaria semillas",
         "locationBias": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
-                "radius": float(radio)
+                "radius": float(radius)
             }
         },
-        "maxResultCount": 10,
         "languageCode": "es"
     }
+
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
         r.raise_for_status()
+        # La respuesta ahora viene envuelta en un objeto 'places'
         return r.json().get("places", [])
     except Exception as e:
-        print(f"Error text search: {e}")
+        print(f"Error en búsqueda por texto: {e}")
         return []
 
-def _buscar_nearby(lat, lon, radio, tipos):
-    """Búsqueda por cercanía con Places API (New)"""
+def _buscar_nearby(lat, lon, radius, included_types):
+    """
+    Búsqueda cercana (New Places API v1)
+    Usa tipos predefinidos por Google.
+    """
     url = "https://places.googleapis.com/v1/places:searchNearby"
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
     }
+    
+    # TIP: Google no reconoce 'agro'. Usamos tipos genéricos que suelen tener insumos.
     payload = {
-        "includedTypes": tipos,
-        "maxResultCount": 10,
+        "includedTypes": ["hardware_store", "home_goods_store", "store"], 
         "locationRestriction": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lon},
-                "radius": float(radio)
+                "radius": float(radius)
             }
         },
         "languageCode": "es"
     }
+
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=10)
         r.raise_for_status()
         return r.json().get("places", [])
     except Exception as e:
-        print(f"Error nearby: {e}")
+        print(f"Error en búsqueda cercana: {e}")
         return []
 
 def buscar_proveedores_cercanos(lat, lon):
