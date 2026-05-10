@@ -606,7 +606,7 @@ def _buscar_con_texto(lat, lon, radius):
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": PLACES_API_KEY,
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         # ERROR ENCONTRADO: Esta línea es OBLIGATORIA en la API nueva
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri,places.location"
     }
@@ -635,7 +635,7 @@ def _buscar_nearby(lat, lon, radius, included_types):
     url = "https://places.googleapis.com/v1/places:searchNearby"
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": PLACES_API_KEY,
+        "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
         "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.googleMapsUri"
     }
     
