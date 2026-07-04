@@ -655,7 +655,11 @@ def opciones_cultivo():
 
         # Búsqueda falló por completo: usar respaldo de nombres genéricos.
         usando_respaldo_total = len(pares) == 0
+        error_busqueda = resultado_busqueda.get("error") if isinstance(resultado_busqueda, dict) else None
         if usando_respaldo_total:
+            # 🔎 Esto queda en los logs de Render (Logs -> busca "FALLBACK TOTAL")
+            # para poder ver la causa real en vez de adivinar.
+            print(f"[opciones-cultivo] FALLBACK TOTAL para {municipio}, {departamento}. Motivo: {error_busqueda}")
             pares = construir_candidatos_respaldo()
 
         evaluados = []
@@ -685,16 +689,21 @@ def opciones_cultivo():
 
         return jsonify({
             "opciones": [nombre for nombre, _, _ in top],
-            "_debug_calculo": [
-                {
-                    "cultivo": nombre,
-                    "nivel_rentabilidad": calc["nivel_rentabilidad"],
-                    "ganancia_estimada_cop": calc["ganancia_estimada_cop"],
-                    "area_recomendada_ha": calc["area_recomendada_ha"],
-                    "campos_estimados": campos_est,
-                }
-                for nombre, calc, campos_est in top
-            ],
+            "_debug_calculo": {
+                "zona_consultada": f"{municipio}, {departamento}",
+                "usando_respaldo_total": usando_respaldo_total,
+                "error_busqueda": error_busqueda,
+                "candidatos": [
+                    {
+                        "cultivo": nombre,
+                        "nivel_rentabilidad": calc["nivel_rentabilidad"],
+                        "ganancia_estimada_cop": calc["ganancia_estimada_cop"],
+                        "area_recomendada_ha": calc["area_recomendada_ha"],
+                        "campos_estimados": campos_est,
+                    }
+                    for nombre, calc, campos_est in top
+                ],
+            },
         })
 
     except Exception as e:
@@ -803,6 +812,9 @@ def plan_cultivo():
         # 1-2. Parámetros técnicos + relleno transparente de lo faltante
         # ---------------------------------------------------------
         parametros_crudos = obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo)
+        error_busqueda = parametros_crudos.get("error") if isinstance(parametros_crudos, dict) else "respuesta no era un dict"
+        if error_busqueda:
+            print(f"[plan-cultivo] Búsqueda sin datos usables para '{cultivo}' en {municipio}, {departamento}. Motivo: {error_busqueda}")
         parametros, campos_estimados = completar_parametros(parametros_crudos)
         advertencia_datos = len(campos_estimados) > 0
 
@@ -828,7 +840,9 @@ def plan_cultivo():
 
         # Metadata útil para depuración / trazabilidad (Flutter puede ignorarla).
         plan_final["_debug_calculo"] = {
+            "zona_consultada": f"{municipio}, {departamento}",
             "advertencia_datos_genericos": advertencia_datos,
+            "error_busqueda": error_busqueda,
             "campos_estimados": campos_estimados,
             "fuentes_consultadas": parametros.get("fuentes_consultadas", []),
             "costo_total_establecimiento_ha": calculado["costo_total_establecimiento_ha"],
