@@ -8,8 +8,8 @@ from services.clima_service import get_climate_data
 from services.soil_service import get_soil_data
 from services.inputs_service import get_inputs_index
 from services.agro_technical_service import obtener_parametros_tecnicos, obtener_candidatos_cultivo
-from services.validacion_service import validar_parametros, resumen_errores_para_prompt
-from services.calculo_agricola import calcular_plan, formatear_resultados_para_ui, construir_fallback
+from services.validacion_service import completar_parametros
+from services.calculo_agricola import calcular_plan, formatear_resultados_para_ui, construir_candidatos_respaldo
 from services.utils_numeros import parsear_numero, area_a_m2
 from services.redaccion_service import redactar_plan_final
 import requests
@@ -608,18 +608,19 @@ def opciones_cultivo():
       1. Pide a una IA con búsqueda web (mismas fuentes confiables que
          /plan-cultivo) entre 6 y 8 cultivos candidatos apropiados para el
          clima/suelo de la zona, con sus parámetros técnicos crudos.
-      2. Valida cada candidato (mismas reglas de sanidad que /plan-cultivo).
-         Los candidatos inválidos se descartan silenciosamente (no se
-         rellenan con fallback genérico: en este paso preferimos menos
-         opciones pero reales, a inventar una).
-      3. Para cada candidato válido, calcula su rentabilidad real con
-         calculo_agricola.py usando el presupuesto/área del agricultor.
-      4. Descarta los que salgan "No viable" y ordena el resto por
-         ganancia estimada. Devuelve los 5 mejores nombres.
+      2. Completa cada candidato con completar_parametros: si a la IA le
+         faltó un dato (frecuente en zonas menos documentadas), se rellena
+         con el valor genérico de su categoría en vez de descartar el
+         candidato completo. Se registra qué se estimó, para transparencia.
+      3. Calcula la rentabilidad real de cada uno con calculo_agricola.py.
+      4. Ordena TODOS por ganancia estimada (sin descartar "No viable": se
+         muestra la etiqueta tal cual, igual que ya hace history_page.dart
+         con sus colores) y devuelve los 5 mejores.
 
-    Si tras un reintento no queda ningún candidato viable, devuelve una
-    lista vacía con un mensaje explicando por qué (Flutter debe mostrar
-    ese mensaje en vez de asumir que hay 5 opciones).
+    Solo si la búsqueda web falla por completo (error de red, JSON inválido,
+    cero candidatos) se usa un pequeño set de nombres genéricamente comunes
+    en el agro colombiano (construir_candidatos_respaldo), siempre marcado
+    con advertencia. La app SIEMPRE devuelve algo.
     """
     try:
         body = request.get_json(force=True, silent=True) or {}
@@ -643,66 +644,56 @@ def opciones_cultivo():
 
         contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
 
-        def _obtener_y_evaluar(correccion=None):
-            resultado = obtener_candidatos_cultivo(
-                departamento, municipio, contexto_clima_suelo, tipo_terreno, correccion=correccion
+        resultado_busqueda = obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo, tipo_terreno)
+        candidatos_crudos = resultado_busqueda.get("candidatos", []) if isinstance(resultado_busqueda, dict) else []
+
+        pares = []  # (nombre, parametros_crudos_o_None)
+        for candidato in candidatos_crudos:
+            nombre = str(candidato.get("nombre_cultivo", "")).strip()
+            if nombre:
+                pares.append((nombre, candidato))
+
+        # Búsqueda falló por completo: usar respaldo de nombres genéricos.
+        usando_respaldo_total = len(pares) == 0
+        if usando_respaldo_total:
+            pares = construir_candidatos_respaldo()
+
+        evaluados = []
+        for nombre, parametros_crudos in pares:
+            parametros_completos, campos_estimados = completar_parametros(parametros_crudos)
+            if usando_respaldo_total:
+                campos_estimados = ["todos (respaldo genérico, búsqueda no disponible)"]
+
+            precio_dane = _buscar_precio_dane_para_cultivo(datos_analisis, nombre)
+            calculado = calcular_plan(
+                parametros_completos, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane
             )
-            candidatos_crudos = resultado.get("candidatos", []) if isinstance(resultado, dict) else []
+            evaluados.append((nombre, calculado, campos_estimados))
 
-            evaluados = []
-            errores_candidatos = []
-            for candidato in candidatos_crudos:
-                nombre = candidato.get("nombre_cultivo", "").strip()
-                if not nombre:
-                    continue
+        # Si hay nombres repetidos (la IA a veces sugiere variantes del
+        # mismo cultivo), nos quedamos con la de mejor ganancia.
+        mejores_por_nombre = {}
+        for nombre, calculado, campos_estimados in evaluados:
+            clave = nombre.strip().lower()
+            actual = mejores_por_nombre.get(clave)
+            if actual is None or calculado["ganancia_estimada_cop"] > actual[1]["ganancia_estimada_cop"]:
+                mejores_por_nombre[clave] = (nombre, calculado, campos_estimados)
 
-                es_valido, errores = validar_parametros(candidato)
-                if not es_valido:
-                    errores_candidatos.append(f"{nombre}: {'; '.join(errores)}")
-                    continue
-
-                precio_dane = _buscar_precio_dane_para_cultivo(datos_analisis, nombre)
-                calculado = calcular_plan(candidato, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane)
-
-                if calculado["nivel_rentabilidad"] == "No viable":
-                    continue
-
-                evaluados.append((nombre, calculado))
-
-            return evaluados, errores_candidatos
-
-        evaluados, errores_candidatos = _obtener_y_evaluar()
-
-        # Si casi nada pasó la validación (posible fallo de búsqueda), un
-        # reintento explicando qué falló, igual que en /plan-cultivo.
-        if len(evaluados) < 2 and errores_candidatos:
-            evaluados_2, _ = _obtener_y_evaluar(correccion=resumen_errores_para_prompt(errores_candidatos))
-            # Nos quedamos con la corrida que haya dado más opciones viables.
-            if len(evaluados_2) > len(evaluados):
-                evaluados = evaluados_2
-
-        evaluados.sort(key=lambda item: item[1]["ganancia_estimada_cop"], reverse=True)
-        top = evaluados[:5]
-
-        if not top:
-            return jsonify({
-                "opciones": [],
-                "mensaje": (
-                    "No se encontraron cultivos con datos verificables y rentabilidad "
-                    "positiva para este presupuesto y área en la zona indicada."
-                ),
-            })
+        evaluados_unicos = list(mejores_por_nombre.values())
+        evaluados_unicos.sort(key=lambda item: item[1]["ganancia_estimada_cop"], reverse=True)
+        top = evaluados_unicos[:5]
 
         return jsonify({
-            "opciones": [nombre for nombre, _ in top],
+            "opciones": [nombre for nombre, _, _ in top],
             "_debug_calculo": [
                 {
                     "cultivo": nombre,
                     "nivel_rentabilidad": calc["nivel_rentabilidad"],
                     "ganancia_estimada_cop": calc["ganancia_estimada_cop"],
                     "area_recomendada_ha": calc["area_recomendada_ha"],
+                    "campos_estimados": campos_est,
                 }
-                for nombre, calc in top
+                for nombre, calc, campos_est in top
             ],
         })
 
@@ -809,24 +800,11 @@ def plan_cultivo():
         contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
 
         # ---------------------------------------------------------
-        # 1-2. Parámetros técnicos + validación (con un reintento)
+        # 1-2. Parámetros técnicos + relleno transparente de lo faltante
         # ---------------------------------------------------------
-        parametros = obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo)
-        es_valido, errores = validar_parametros(parametros)
-
-        advertencia_datos = False
-
-        if not es_valido:
-            correccion = resumen_errores_para_prompt(errores)
-            parametros = obtener_parametros_tecnicos(
-                cultivo, departamento, municipio, contexto_clima_suelo, correccion=correccion
-            )
-            es_valido, errores = validar_parametros(parametros)
-
-        if not es_valido:
-            categoria_sugerida = parametros.get("categoria_cultivo") if isinstance(parametros, dict) else None
-            parametros = construir_fallback(categoria_sugerida)
-            advertencia_datos = True
+        parametros_crudos = obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo)
+        parametros, campos_estimados = completar_parametros(parametros_crudos)
+        advertencia_datos = len(campos_estimados) > 0
 
         # ---------------------------------------------------------
         # 3. Cálculo real en Python
@@ -851,6 +829,7 @@ def plan_cultivo():
         # Metadata útil para depuración / trazabilidad (Flutter puede ignorarla).
         plan_final["_debug_calculo"] = {
             "advertencia_datos_genericos": advertencia_datos,
+            "campos_estimados": campos_estimados,
             "fuentes_consultadas": parametros.get("fuentes_consultadas", []),
             "costo_total_establecimiento_ha": calculado["costo_total_establecimiento_ha"],
             "area_disponible_ha": calculado["area_disponible_ha"],

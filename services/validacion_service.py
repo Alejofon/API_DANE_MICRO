@@ -106,3 +106,99 @@ def validar_parametros(parametros):
 def resumen_errores_para_prompt(errores):
     """Convierte la lista de errores en texto legible para pedirle a la IA que corrija."""
     return "\n".join(f"- {e}" for e in errores)
+
+
+# -----------------------------------------------------------------
+# COMPLETAR (no solo validar): el objetivo es que la app SIEMPRE entregue
+# un resultado. En vez de descartar un candidato entero porque a la IA le
+# faltó un dato (frecuente en zonas menos documentadas, ej. Caquetá), se
+# reemplaza SOLO el campo problemático por el valor genérico de respaldo de
+# su categoría, y se deja constancia en 'campos_estimados' para ser
+# transparentes con el usuario. calculo_agricola.py siempre recibe un set
+# de parámetros completo y usable.
+# -----------------------------------------------------------------
+
+# Import local (no circular: calculo_agricola no importa de aquí).
+from .calculo_agricola import construir_fallback
+
+CAMPOS_PARA_CALCULO = [
+    "distancia_entre_surcos_m",
+    "distancia_entre_plantas_m",
+    "costo_semilla_o_plantula_unidad_cop",
+    "costo_preparacion_terreno_por_ha_cop",
+    "costo_fertilizantes_por_ha_cop",
+    "jornales_necesarios_por_ha_ciclo",
+    "valor_jornal_cop",
+    "ciclo_productivo_meses",
+    "precio_venta_kg_cop",
+]
+
+
+def _numero_valido(valor, minimo=None, maximo=None):
+    if valor is None:
+        return False
+    try:
+        valor_num = float(valor)
+    except (TypeError, ValueError):
+        return False
+    if minimo is not None and not (minimo <= valor_num <= maximo):
+        return False
+    return True
+
+
+def completar_parametros(parametros_crudos):
+    """
+    Retorna (parametros_completos: dict, campos_estimados: list[str]).
+    Nunca falla: si `parametros_crudos` viene vacío o con error, devuelve
+    el respaldo genérico completo (categoría 'ciclo_corto' por defecto).
+    """
+    if not isinstance(parametros_crudos, dict) or "error" in parametros_crudos:
+        return construir_fallback("ciclo_corto"), ["todos los campos (sin datos de búsqueda)"]
+
+    categoria = parametros_crudos.get("categoria_cultivo")
+    if categoria not in CATEGORIAS_VALIDAS:
+        categoria = "ciclo_corto"
+
+    respaldo = construir_fallback(categoria)
+    completos = dict(parametros_crudos)
+    completos["categoria_cultivo"] = categoria
+    campos_estimados = []
+
+    for campo in CAMPOS_PARA_CALCULO:
+        minimo, maximo = RANGOS.get(campo, (None, None))
+        if not _numero_valido(completos.get(campo), minimo, maximo):
+            completos[campo] = respaldo[campo]
+            campos_estimados.append(campo)
+
+    # Rendimiento: basta con que UNO de los dos (por planta o por ha) sea
+    # válido. Si ninguno lo es, se rellenan ambos desde el respaldo.
+    rp_valido = _numero_valido(completos.get("rendimiento_estimado_kg_por_planta"), 0.0001, 10_000_000)
+    rh_valido = _numero_valido(completos.get("rendimiento_estimado_kg_por_ha"), 0.0001, 500_000_000)
+    if not rp_valido and not rh_valido:
+        completos["rendimiento_estimado_kg_por_planta"] = respaldo["rendimiento_estimado_kg_por_planta"]
+        completos["rendimiento_estimado_kg_por_ha"] = respaldo["rendimiento_estimado_kg_por_ha"]
+        campos_estimados.append("rendimiento_estimado")
+
+    # Chequeo cruzado de costo de material vegetal absurdo (mismo caso que
+    # reportó el usuario originalmente): si persiste tras el relleno
+    # anterior, se reemplaza el costo unitario de semilla/plántula.
+    try:
+        surcos = float(completos["distancia_entre_surcos_m"])
+        dist_plantas = float(completos["distancia_entre_plantas_m"])
+        plantas_por_ha = 10000.0 / (surcos * dist_plantas) if surcos > 0 and dist_plantas > 0 else 0.0
+        costo_material_ha = plantas_por_ha * float(completos["costo_semilla_o_plantula_unidad_cop"])
+        if costo_material_ha > TECHO_MATERIAL_VEGETAL_POR_HA_COP:
+            completos["costo_semilla_o_plantula_unidad_cop"] = respaldo["costo_semilla_o_plantula_unidad_cop"]
+            campos_estimados.append("costo_semilla_o_plantula_unidad_cop (costo absurdo ajustado)")
+    except (ZeroDivisionError, ValueError, KeyError):
+        pass
+
+    for campo_texto in ("epoca_siembra_recomendada", "calendario_riego", "calendario_fertilizacion"):
+        if not completos.get(campo_texto):
+            completos[campo_texto] = respaldo[campo_texto]
+
+    completos.setdefault("plagas_comunes", [])
+    completos.setdefault("beneficios_cultivo", [])
+    completos.setdefault("fuentes_consultadas", [])
+
+    return completos, campos_estimados

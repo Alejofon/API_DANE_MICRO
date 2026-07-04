@@ -91,15 +91,46 @@ def construir_fallback(categoria):
 
 def _clasificar_rentabilidad(ganancia, costo_invertido):
     if costo_invertido <= 0:
-        return "No viable"
+        return "Baja"
     margen = ganancia / costo_invertido
-    if margen <= 0:
+    # Con datos estimados (búsqueda web + respaldo genérico) un margen
+    # ligeramente negativo puede ser error de estimación, no inviabilidad
+    # real. Solo se marca "No viable" ante una pérdida clara (>30%).
+    if margen <= -0.30:
         return "No viable"
-    if margen < 0.15:
+    if margen <= 0.15:
         return "Baja"
     if margen < 0.5:
         return "Media"
     return "Alta"
+
+
+# Nombres de respaldo por categoría, SOLO para el caso extremo en que la
+# búsqueda web falle por completo (error de red, JSON inválido, etc) al
+# proponer candidatos. No son "la base de datos de cultivos": son apenas
+# 3 nombres ampliamente comunes en el agro colombiano por categoría, para
+# que la app nunca se quede sin ninguna opción que mostrar. Siempre se
+# marcan con advertencia de datos estimados.
+NOMBRES_RESPALDO_POR_CATEGORIA = {
+    "ciclo_corto": ["Tomate", "Cilantro", "Lechuga"],
+    "semipermanente": ["Fríjol", "Maíz", "Ahuyama"],
+    "arboreo_frutal": ["Plátano", "Cacao", "Cítricos"],
+    "extensivo": ["Yuca", "Arroz", "Caña panelera"],
+}
+
+
+def construir_candidatos_respaldo():
+    """
+    Devuelve una lista de (nombre_cultivo, parametros_respaldo) para usar
+    ÚNICAMENTE cuando obtener_candidatos_cultivo falló por completo (no
+    cuando solo faltaron algunos campos: para eso está completar_parametros
+    en validacion_service.py).
+    """
+    candidatos = []
+    for categoria, nombres in NOMBRES_RESPALDO_POR_CATEGORIA.items():
+        for nombre in nombres:
+            candidatos.append((nombre, construir_fallback(categoria)))
+    return candidatos
 
 
 def calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_kg=None):
