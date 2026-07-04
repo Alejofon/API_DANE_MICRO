@@ -11,7 +11,7 @@ from services.agro_technical_service import obtener_parametros_tecnicos, obtener
 from services.validacion_service import completar_parametros
 from services.calculo_agricola import calcular_plan, formatear_resultados_para_ui, construir_candidatos_respaldo
 from services.utils_numeros import parsear_numero, area_a_m2
-from services.redaccion_service import redactar_plan_final
+from services.redaccion_service import redactar_plan_final, plan_no_apto
 import requests
 from flask import jsonify, request
 
@@ -815,6 +815,27 @@ def plan_cultivo():
         error_busqueda = parametros_crudos.get("error") if isinstance(parametros_crudos, dict) else "respuesta no era un dict"
         if error_busqueda:
             print(f"[plan-cultivo] Búsqueda sin datos usables para '{cultivo}' en {municipio}, {departamento}. Motivo: {error_busqueda}")
+
+        # Corte temprano: si la IA determinó que el cultivo NO es apto para
+        # el clima/suelo de la zona, no tiene sentido calcular costos ni
+        # rendimientos de algo que no debería sembrarse ahí (el caso
+        # "mango en el Ártico"). Se responde de inmediato con "No viable" y
+        # el motivo real, sin gastar la llamada de redacción.
+        if (
+            error_busqueda is None
+            and isinstance(parametros_crudos, dict)
+            and parametros_crudos.get("apto_para_la_zona") is False
+        ):
+            plan_final = plan_no_apto(
+                cultivo, parametros_crudos.get("motivo_aptitud"), municipio, departamento
+            )
+            plan_final["_debug_calculo"] = {
+                "zona_consultada": f"{municipio}, {departamento}",
+                "apto_para_la_zona": False,
+                "motivo_aptitud": parametros_crudos.get("motivo_aptitud"),
+            }
+            return jsonify(plan_final)
+
         parametros, campos_estimados = completar_parametros(parametros_crudos)
         advertencia_datos = len(campos_estimados) > 0
 

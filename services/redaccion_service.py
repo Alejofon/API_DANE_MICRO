@@ -25,6 +25,65 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MODELO_REDACCION = "gpt-4.1-mini"
 
 
+def plan_no_apto(cultivo, motivo, municipio, departamento):
+    """
+    Respuesta inmediata cuando agro_technical_service determinó que el
+    cultivo NO es agronómicamente apto para la zona (ej. un cultivo tropical
+    en un páramo frío). No se llama a ninguna IA aquí: no tiene sentido
+    calcular costos/rendimientos de algo que no debería sembrarse ahí. Se
+    devuelve el mismo esquema que espera project_detail_page.dart, pero
+    con "No viable" y la razón real en vez de un plan completo.
+    """
+    motivo_texto = motivo or (
+        f"{cultivo} no es agronómicamente compatible con el clima/suelo de "
+        f"{municipio}, {departamento}."
+    )
+    return {
+        "rentabilidad": {
+            "nivel": "No viable",
+            "descripcion": motivo_texto,
+            "retorno_inversion_meses": None,
+            "ganancia_estimada_por_cosecha": "No aplica",
+            "area_realmente_cultivable": "No aplica",
+            "numero_plantas_estimadas": 0,
+            "distancia_siembra": "No aplica",
+            "produccion_estimada": "No aplica",
+            "area_minima_rentable": "No aplica",
+            "presupuesto_minimo_recomendado": "No aplica",
+        },
+        "siembra_estimada": {
+            "area_recomendada_siembra": "No aplica",
+            "numero_plantas_estimadas": 0,
+            "distancia_siembra": "No aplica",
+            "produccion_estimada": "No aplica",
+            "area_minima_rentable": "No aplica",
+            "presupuesto_minimo_recomendado": "No aplica",
+        },
+        "dificultad": {
+            "nivel": "Alta",
+            "descripcion": (
+                "No se recomienda continuar con este cultivo en esta zona por "
+                "incompatibilidad agronómica. " + motivo_texto
+            ),
+        },
+        "tiempos": {
+            "siembra_mejor_epoca": "No aplica",
+            "cosecha_meses": 0,
+            "calendario_riego": "No aplica",
+            "calendario_fertilizacion": "No aplica",
+        },
+        "plagas": [],
+        "mercado": {
+            "precio_actual_kg": "No aplica",
+            "canales_venta": [],
+            "compradores": [],
+            "tendencias": "No aplica",
+        },
+        "beneficios": [],
+        "pasos_siembra": [],
+    }
+
+
 def _extraer_json(texto):
     if not texto:
         return None
