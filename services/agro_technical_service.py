@@ -32,7 +32,7 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 # para leer el contenido real antes de responder. gpt-5.4-mini es la opción
 # económica de esa familia con razonamiento habilitado.
 MODELO_BUSQUEDA = "gpt-5.4-mini"
-ESFUERZO_RAZONAMIENTO = "medium"  # "minimal"/"none" degradan la calidad de la búsqueda
+ESFUERZO_RAZONAMIENTO = "low"  # "medium" daba mejores respuestas pero tardaba >150s; "minimal"/"none" degradan la búsqueda
 
 # Fuentes técnicas confiables. Se restringe la búsqueda web a estos dominios
 # (la restricción incluye subdominios automáticamente, ej: 'gov.co' abajo
@@ -287,7 +287,7 @@ def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima
         "input": prompt,
     }
 
-    data, error = _post_a_responses_api(payload, timeout=150)
+    data, error = _post_a_responses_api(payload, timeout=220)
     if error:
         return {"error": f"Error consultando el modelo de búsqueda: {error}"}
 
