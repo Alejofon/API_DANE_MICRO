@@ -19,6 +19,7 @@ el fallback conservador de calculo_agricola.py).
 import os
 import json
 import re
+import time
 import requests
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -219,6 +220,50 @@ def _limpiar_fuentes(parametros):
     return parametros
 
 
+def _post_a_responses_api(payload, timeout, max_reintentos_429=2):
+    """
+    POST a la Responses API con reintento SOLO para 429 (rate limit de
+    OpenAI) — ese error llega casi instantáneo, así que reintentar es
+    barato en tiempo. Otros errores (timeout, red, 4xx/5xx distintos)
+    probablemente no se arreglan reintentando, así que fallan de una vez
+    y el llamador decide (retry con corrección, o fallback genérico).
+
+    Retorna (data: dict, error: str|None).
+    """
+    intentos = 0
+    while True:
+        intentos += 1
+        try:
+            resp = requests.post(
+                OPENAI_RESPONSES_URL,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+        except requests.exceptions.Timeout:
+            return None, "Timeout esperando respuesta del modelo de búsqueda"
+        except requests.exceptions.RequestException as e:
+            return None, f"Error de conexión: {e}"
+
+        if resp.status_code == 429:
+            if intentos <= max_reintentos_429:
+                espera = 8 * intentos  # 8s, 16s
+                print(f"[agro_technical_service] 429 (rate limit) recibido, reintentando en {espera}s (intento {intentos})")
+                time.sleep(espera)
+                continue
+            return None, "429 Too Many Requests (límite de tasa de OpenAI, incluso tras reintentos)"
+
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            return None, f"Error HTTP {resp.status_code}: {e}"
+
+        return resp.json(), None
+
+
 def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo=None, correccion=None):
     """
     Devuelve un dict con los parámetros crudos del cultivo, o {"error": "..."}.
@@ -242,20 +287,9 @@ def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima
         "input": prompt,
     }
 
-    try:
-        resp = requests.post(
-            OPENAI_RESPONSES_URL,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-            },
-            json=payload,
-            timeout=150,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Error consultando el modelo de búsqueda: {e}"}
+    data, error = _post_a_responses_api(payload, timeout=150)
+    if error:
+        return {"error": f"Error consultando el modelo de búsqueda: {error}"}
 
     texto = _extraer_texto_respuesta(data)
     parametros = _extraer_json(texto)
@@ -382,20 +416,9 @@ def obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo=Non
         "input": prompt,
     }
 
-    try:
-        resp = requests.post(
-            OPENAI_RESPONSES_URL,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-            },
-            json=payload,
-            timeout=280,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Error consultando el modelo de búsqueda: {e}"}
+    data, error = _post_a_responses_api(payload, timeout=280, max_reintentos_429=1)
+    if error:
+        return {"error": f"Error consultando el modelo de búsqueda: {error}"}
 
     texto = _extraer_texto_respuesta(data)
     resultado = _extraer_json(texto)
