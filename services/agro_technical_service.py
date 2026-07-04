@@ -216,3 +216,132 @@ def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima
         return {"error": f"Faltan campos en la respuesta de la IA: {faltantes}", "parcial": parametros}
 
     return parametros
+
+
+# -----------------------------------------------------------------
+# CANDIDATOS DE CULTIVO (para la pantalla de "Opciones de siembra")
+# -----------------------------------------------------------------
+# Mismo principio que obtener_parametros_tecnicos, pero en vez de investigar
+# UN cultivo ya elegido, le pide a la IA que PROPONGA varios cultivos
+# apropiados para la zona (clima/suelo) y devuelva los mismos parámetros
+# técnicos crudos de cada uno, para que app.py calcule la rentabilidad real
+# de cada candidato en Python (calculo_agricola.py) y solo se muestren al
+# agricultor los que efectivamente dan positivo con su presupuesto y área.
+# Así se evita repetir siempre "los mismos 2 cultivos": la propuesta inicial
+# también queda anclada a datos de búsqueda + matemáticas, no a texto libre.
+
+CAMPOS_REQUERIDOS_CANDIDATO = ["nombre_cultivo"] + CAMPOS_REQUERIDOS
+
+
+def _construir_prompt_candidatos(departamento, municipio, contexto_clima_suelo, tipo_terreno, correccion=None):
+    contexto = f"\n\nCONTEXTO DE CLIMA Y SUELO YA MEDIDO EN LA ZONA:\n{contexto_clima_suelo}" if contexto_clima_suelo else ""
+    terreno = f"\nTIPO DE TERRENO: {tipo_terreno}" if tipo_terreno else ""
+    nota_correccion = ""
+    if correccion:
+        nota_correccion = f"""
+IMPORTANTE - CORRECCIÓN REQUERIDA:
+En tu respuesta anterior, estos candidatos tenían valores fuera de rango o no
+verificables:
+{correccion}
+Reemplázalos por otros cultivos distintos, o corrige sus cifras con datos reales.
+"""
+
+    return f"""
+Eres un asistente técnico que SOLO recopila datos agronómicos verificables mediante
+búsqueda web. NO debes redactar explicaciones para agricultores. Tu única salida
+es un JSON con una lista de cultivos candidatos y sus parámetros crudos.
+
+UBICACIÓN: {municipio}, {departamento}, Colombia
+{contexto}{terreno}
+{nota_correccion}
+
+Propón entre 6 y 8 cultivos DIFERENTES ENTRE SÍ que sean agronómicamente
+apropiados para el clima y suelo de esta zona (no solo los más obvios/genéricos:
+incluye al menos 2 opciones menos comunes pero viables, como hortalizas
+gourmet, aromáticas o frutas andinas, si el clima las permite). Para cada uno,
+busca en fuentes técnicas (ICA, Agrosavia, Agronet, UPRA, FAO, Fenalce, Fedepapa,
+Asohofrucol, universidades, SENA, gobernaciones/secretarías de agricultura) los
+mismos datos que usarías para un plan de cultivo real. Si de verdad no hay dato
+disponible para un cultivo, usa null en ese campo (nunca inventes un número al
+azar) — pero intenta que la mayoría de campos tengan dato real.
+
+Responde EXCLUSIVAMENTE con un JSON válido (sin texto adicional, sin marcadores
+de código), con esta estructura EXACTA:
+
+{{
+  "candidatos": [
+    {{
+      "nombre_cultivo": "texto",
+      "categoria_cultivo": "ciclo_corto | semipermanente | arboreo_frutal | extensivo",
+      "distancia_entre_surcos_m": número,
+      "distancia_entre_plantas_m": número,
+      "costo_semilla_o_plantula_unidad_cop": número,
+      "costo_preparacion_terreno_por_ha_cop": número,
+      "costo_fertilizantes_por_ha_cop": número,
+      "costo_agroquimicos_control_plagas_por_ha_cop": número,
+      "jornales_necesarios_por_ha_ciclo": número,
+      "valor_jornal_cop": número,
+      "rendimiento_estimado_kg_por_planta": número o null,
+      "rendimiento_estimado_kg_por_ha": número o null,
+      "ciclo_productivo_meses": número,
+      "precio_venta_kg_cop": número o null,
+      "epoca_siembra_recomendada": "texto",
+      "calendario_riego": "texto",
+      "calendario_fertilizacion": "texto",
+      "plagas_comunes": [
+        {{"nombre": "texto", "sintomas": "texto", "control": "texto", "epoca_riesgo": "texto"}}
+      ],
+      "beneficios_cultivo": ["texto", "texto"],
+      "fuentes_consultadas": ["url1", "url2"]
+    }}
+  ]
+}}
+"""
+
+
+def obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo=None, tipo_terreno=None, correccion=None):
+    """
+    Devuelve {"candidatos": [dict, dict, ...]} o {"error": "..."}.
+    Cada dict tiene el mismo esquema que obtener_parametros_tecnicos, más
+    "nombre_cultivo". No calcula ni filtra por viabilidad: eso lo hace
+    app.py con calculo_agricola.py para cada candidato.
+    """
+    if not OPENAI_API_KEY:
+        return {"error": "OPENAI_API_KEY no configurada en el backend"}
+
+    prompt = _construir_prompt_candidatos(departamento, municipio, contexto_clima_suelo, tipo_terreno, correccion)
+
+    payload = {
+        "model": MODELO_BUSQUEDA,
+        "tools": [
+            {
+                "type": "web_search",
+                "filters": {"allowed_domains": DOMINIOS_CONFIABLES},
+            }
+        ],
+        "tool_choice": "auto",
+        "input": prompt,
+    }
+
+    try:
+        resp = requests.post(
+            OPENAI_RESPONSES_URL,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+            },
+            json=payload,
+            timeout=90,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Error consultando el modelo de búsqueda: {e}"}
+
+    texto = _extraer_texto_respuesta(data)
+    resultado = _extraer_json(texto)
+
+    if resultado is None or "candidatos" not in resultado or not isinstance(resultado["candidatos"], list):
+        return {"error": "La IA de búsqueda no devolvió una lista de candidatos válida", "raw": texto[:500]}
+
+    return resultado

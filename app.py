@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify, request
@@ -8,7 +7,7 @@ from datetime import datetime
 from services.clima_service import get_climate_data
 from services.soil_service import get_soil_data
 from services.inputs_service import get_inputs_index
-from services.agro_technical_service import obtener_parametros_tecnicos
+from services.agro_technical_service import obtener_parametros_tecnicos, obtener_candidatos_cultivo
 from services.validacion_service import validar_parametros, resumen_errores_para_prompt
 from services.calculo_agricola import calcular_plan, formatear_resultados_para_ui, construir_fallback
 from services.utils_numeros import parsear_numero, area_a_m2
@@ -592,6 +591,120 @@ def analisis_terreno():
         }
 
         return jsonify(respuesta)
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# -----------------------------------
+# OPCIONES DE CULTIVO (candidatos con datos reales + filtro de viabilidad)
+# -----------------------------------
+
+@app.route("/opciones-cultivo", methods=["POST"])
+def opciones_cultivo():
+    """
+    Reemplaza la llamada directa Flutter -> OpenAI de OptionsPage.
+    Flujo:
+      1. Pide a una IA con búsqueda web (mismas fuentes confiables que
+         /plan-cultivo) entre 6 y 8 cultivos candidatos apropiados para el
+         clima/suelo de la zona, con sus parámetros técnicos crudos.
+      2. Valida cada candidato (mismas reglas de sanidad que /plan-cultivo).
+         Los candidatos inválidos se descartan silenciosamente (no se
+         rellenan con fallback genérico: en este paso preferimos menos
+         opciones pero reales, a inventar una).
+      3. Para cada candidato válido, calcula su rentabilidad real con
+         calculo_agricola.py usando el presupuesto/área del agricultor.
+      4. Descarta los que salgan "No viable" y ordena el resto por
+         ganancia estimada. Devuelve los 5 mejores nombres.
+
+    Si tras un reintento no queda ningún candidato viable, devuelve una
+    lista vacía con un mensaje explicando por qué (Flutter debe mostrar
+    ese mensaje en vez de asumir que hay 5 opciones).
+    """
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+
+        departamento = str(body.get("departamento", "")).strip()
+        municipio = str(body.get("municipio", "")).strip()
+        presupuesto_raw = body.get("presupuesto")
+        area_raw = body.get("area")
+        unidad = str(body.get("unidad", "Metros cuadrados"))
+        tipo_terreno = body.get("tipo_terreno")
+        datos_analisis = body.get("datos_analisis")
+
+        if not departamento or not municipio:
+            return jsonify({"success": False, "error": "Se requieren departamento y municipio"}), 400
+
+        presupuesto_cop = parsear_numero(presupuesto_raw)
+        area_disponible_m2 = area_a_m2(area_raw, unidad)
+
+        if presupuesto_cop <= 0 or area_disponible_m2 <= 0:
+            return jsonify({"success": False, "error": "presupuesto y area deben ser mayores a 0"}), 400
+
+        contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
+
+        def _obtener_y_evaluar(correccion=None):
+            resultado = obtener_candidatos_cultivo(
+                departamento, municipio, contexto_clima_suelo, tipo_terreno, correccion=correccion
+            )
+            candidatos_crudos = resultado.get("candidatos", []) if isinstance(resultado, dict) else []
+
+            evaluados = []
+            errores_candidatos = []
+            for candidato in candidatos_crudos:
+                nombre = candidato.get("nombre_cultivo", "").strip()
+                if not nombre:
+                    continue
+
+                es_valido, errores = validar_parametros(candidato)
+                if not es_valido:
+                    errores_candidatos.append(f"{nombre}: {'; '.join(errores)}")
+                    continue
+
+                precio_dane = _buscar_precio_dane_para_cultivo(datos_analisis, nombre)
+                calculado = calcular_plan(candidato, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane)
+
+                if calculado["nivel_rentabilidad"] == "No viable":
+                    continue
+
+                evaluados.append((nombre, calculado))
+
+            return evaluados, errores_candidatos
+
+        evaluados, errores_candidatos = _obtener_y_evaluar()
+
+        # Si casi nada pasó la validación (posible fallo de búsqueda), un
+        # reintento explicando qué falló, igual que en /plan-cultivo.
+        if len(evaluados) < 2 and errores_candidatos:
+            evaluados_2, _ = _obtener_y_evaluar(correccion=resumen_errores_para_prompt(errores_candidatos))
+            # Nos quedamos con la corrida que haya dado más opciones viables.
+            if len(evaluados_2) > len(evaluados):
+                evaluados = evaluados_2
+
+        evaluados.sort(key=lambda item: item[1]["ganancia_estimada_cop"], reverse=True)
+        top = evaluados[:5]
+
+        if not top:
+            return jsonify({
+                "opciones": [],
+                "mensaje": (
+                    "No se encontraron cultivos con datos verificables y rentabilidad "
+                    "positiva para este presupuesto y área en la zona indicada."
+                ),
+            })
+
+        return jsonify({
+            "opciones": [nombre for nombre, _ in top],
+            "_debug_calculo": [
+                {
+                    "cultivo": nombre,
+                    "nivel_rentabilidad": calc["nivel_rentabilidad"],
+                    "ganancia_estimada_cop": calc["ganancia_estimada_cop"],
+                    "area_recomendada_ha": calc["area_recomendada_ha"],
+                }
+                for nombre, calc in top
+            ],
+        })
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
