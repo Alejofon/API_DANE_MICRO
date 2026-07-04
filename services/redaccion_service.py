@@ -209,7 +209,7 @@ def redactar_plan_final(cultivo, ubicacion, ui, calculado, parametros, advertenc
                 "temperature": 0.3,
                 "max_tokens": 2000,
             },
-            timeout=45,
+            timeout=60,
         )
         resp.raise_for_status()
         data = resp.json()

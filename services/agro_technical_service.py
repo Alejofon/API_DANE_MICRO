@@ -198,7 +198,7 @@ def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
             },
             json=payload,
-            timeout=60,
+            timeout=120,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -331,7 +331,7 @@ def obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo=Non
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
             },
             json=payload,
-            timeout=90,
+            timeout=170,
         )
         resp.raise_for_status()
         data = resp.json()
