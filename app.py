@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify, request
@@ -7,6 +8,11 @@ from datetime import datetime
 from services.clima_service import get_climate_data
 from services.soil_service import get_soil_data
 from services.inputs_service import get_inputs_index
+from services.agro_technical_service import obtener_parametros_tecnicos
+from services.validacion_service import validar_parametros, resumen_errores_para_prompt
+from services.calculo_agricola import calcular_plan, formatear_resultados_para_ui, construir_fallback
+from services.utils_numeros import parsear_numero, area_a_m2
+from services.redaccion_service import redactar_plan_final
 import requests
 from flask import jsonify, request
 
@@ -586,6 +592,159 @@ def analisis_terreno():
         }
 
         return jsonify(respuesta)
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# -----------------------------------
+# PLAN DE CULTIVO (cálculo real en backend + redacción final por IA)
+# -----------------------------------
+
+def _formatear_contexto_clima_suelo(datos_analisis):
+    """
+    Convierte el bloque 'datos_analisis' (la misma respuesta de
+    /analisis-terreno que ya recibe Flutter) en texto plano para
+    dárselo de contexto a la IA de búsqueda técnica.
+    """
+    if not datos_analisis:
+        return None
+
+    partes = []
+    clima = (datos_analisis.get("clima") or {}).get("data")
+    if clima:
+        partes.append(
+            f"Clima: temp {clima.get('current', {}).get('temperature')}°C, "
+            f"humedad {clima.get('current', {}).get('humidity')}%, "
+            f"precipitación {clima.get('daily', {}).get('precipitation_sum')}mm"
+        )
+
+    suelo = (datos_analisis.get("suelo") or {}).get("data")
+    if suelo:
+        partes.append(
+            f"Suelo (0-5cm): pH {suelo.get('ph')}, arcilla {suelo.get('clay')}%, arena {suelo.get('sand')}%"
+        )
+
+    return "\n".join(partes) if partes else None
+
+
+def _buscar_precio_dane_para_cultivo(datos_analisis, cultivo):
+    """
+    Si el cultivo consultado coincide (por nombre) con algún producto
+    reportado en precios_mercado.por_grupo del análisis de terreno,
+    se usa ESE precio real del DANE en vez del que estime la IA.
+    Es solo un match por nombre; si no hay coincidencia, retorna None
+    y el cálculo usa el precio que trajo agro_technical_service.
+    """
+    if not datos_analisis:
+        return None
+
+    cultivo_norm = cultivo.strip().lower()
+    por_grupo = (datos_analisis.get("precios_mercado") or {}).get("por_grupo") or {}
+
+    for _, info_grupo in por_grupo.items():
+        for lista_key in ("productos_mas_caros", "productos_mas_baratos"):
+            for producto in info_grupo.get(lista_key, []):
+                nombre = str(producto.get("producto", "")).strip().lower()
+                if nombre and (nombre in cultivo_norm or cultivo_norm in nombre):
+                    return producto.get("precio_promedio")
+    return None
+
+
+@app.route("/plan-cultivo", methods=["POST"])
+def plan_cultivo():
+    """
+    Endpoint que reemplaza la llamada directa Flutter -> OpenAI para el
+    plan detallado de un cultivo. Flujo:
+      1. Pide parámetros técnicos crudos a una IA con búsqueda web
+         restringida a fuentes agrícolas confiables.
+      2. Valida esos parámetros (rechaza cifras absurdas), reintenta
+         una vez si es necesario, y si sigue fallando usa un fallback
+         genérico conservador por categoría de cultivo.
+      3. Calcula TODO en Python (calculo_agricola.py): plantas/ha,
+         costos, área financiable, área recomendada, producción,
+         ingresos, ganancia, rentabilidad.
+      4. Le pide a gpt-4.1-mini que SOLO redacte el texto final,
+         reutilizando esas cifras (y el backend las sobrescribe de
+         todas formas, por seguridad).
+
+    Devuelve exactamente el mismo esquema JSON que hoy arma
+    project_detail_prompt.dart, para que el resto de project_detail_page.dart
+    (parsing, UI, guardado en historial) no necesite cambios.
+    """
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+
+        cultivo = str(body.get("cultivo", "")).strip()
+        departamento = str(body.get("departamento", "")).strip()
+        municipio = str(body.get("municipio", "")).strip()
+        presupuesto_raw = body.get("presupuesto")
+        area_raw = body.get("area")
+        unidad = str(body.get("unidad", "Metros cuadrados"))
+        tipo_terreno = body.get("tipo_terreno")
+        datos_analisis = body.get("datos_analisis")
+
+        if not cultivo or not departamento or not municipio:
+            return jsonify({"success": False, "error": "Se requieren cultivo, departamento y municipio"}), 400
+
+        presupuesto_cop = parsear_numero(presupuesto_raw)
+        area_disponible_m2 = area_a_m2(area_raw, unidad)
+
+        if presupuesto_cop <= 0 or area_disponible_m2 <= 0:
+            return jsonify({"success": False, "error": "presupuesto y area deben ser mayores a 0"}), 400
+
+        contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
+
+        # ---------------------------------------------------------
+        # 1-2. Parámetros técnicos + validación (con un reintento)
+        # ---------------------------------------------------------
+        parametros = obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo)
+        es_valido, errores = validar_parametros(parametros)
+
+        advertencia_datos = False
+
+        if not es_valido:
+            correccion = resumen_errores_para_prompt(errores)
+            parametros = obtener_parametros_tecnicos(
+                cultivo, departamento, municipio, contexto_clima_suelo, correccion=correccion
+            )
+            es_valido, errores = validar_parametros(parametros)
+
+        if not es_valido:
+            categoria_sugerida = parametros.get("categoria_cultivo") if isinstance(parametros, dict) else None
+            parametros = construir_fallback(categoria_sugerida)
+            advertencia_datos = True
+
+        # ---------------------------------------------------------
+        # 3. Cálculo real en Python
+        # ---------------------------------------------------------
+        precio_dane = _buscar_precio_dane_para_cultivo(datos_analisis, cultivo)
+        calculado = calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane)
+        ui = formatear_resultados_para_ui(calculado, parametros)
+
+        # ---------------------------------------------------------
+        # 4. Redacción final (solo texto, cifras ya fijas)
+        # ---------------------------------------------------------
+        ubicacion_texto = f"{municipio}, {departamento}" + (f" - Terreno: {tipo_terreno}" if tipo_terreno else "")
+        plan_final = redactar_plan_final(
+            cultivo=cultivo,
+            ubicacion=ubicacion_texto,
+            ui=ui,
+            calculado=calculado,
+            parametros=parametros,
+            advertencia=advertencia_datos,
+        )
+
+        # Metadata útil para depuración / trazabilidad (Flutter puede ignorarla).
+        plan_final["_debug_calculo"] = {
+            "advertencia_datos_genericos": advertencia_datos,
+            "fuentes_consultadas": parametros.get("fuentes_consultadas", []),
+            "costo_total_establecimiento_ha": calculado["costo_total_establecimiento_ha"],
+            "area_disponible_ha": calculado["area_disponible_ha"],
+            "area_recomendada_ha": calculado["area_recomendada_ha"],
+        }
+
+        return jsonify(plan_final)
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
