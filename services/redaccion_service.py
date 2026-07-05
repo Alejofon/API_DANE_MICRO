@@ -102,7 +102,7 @@ def _extraer_json(texto):
     return None
 
 
-def _construir_prompt(cultivo, ubicacion, ui, calculado, parametros, advertencia):
+def _construir_prompt(cultivo, ubicacion, ui, calculado, parametros, advertencia, ganancia_atipica=False):
     nota_advertencia = ""
     if advertencia:
         nota_advertencia = (
@@ -112,13 +112,22 @@ def _construir_prompt(cultivo, ubicacion, ui, calculado, parametros, advertencia
             "sin alarmar al usuario, invitándolo a validar con un técnico local.\n"
         )
 
+    nota_ganancia_atipica = ""
+    if ganancia_atipica:
+        nota_ganancia_atipica = (
+            "\nNOTA: La ganancia estimada resultó inusualmente alta respecto a la "
+            "inversión (más de 10 veces). Aunque la cifra ya está calculada y no "
+            "debes cambiarla, menciona brevemente que esta cifra es atípica y que "
+            "conviene verificarla con un técnico local antes de invertir.\n"
+        )
+
     return f"""
 Eres un ingeniero agrónomo colombiano. Tu ÚNICO trabajo es REDACTAR texto
 explicativo en español para un agricultor. NO debes calcular ni cambiar
 ninguna cifra: todas las que se te dan a continuación ya fueron calculadas
 y son definitivas. Tu tarea es explicarlas con claridad y dar contexto
 cualitativo (plagas, calendario, mercado, beneficios, pasos de siembra).
-{nota_advertencia}
+{nota_advertencia}{nota_ganancia_atipica}
 CULTIVO: {cultivo}
 UBICACIÓN: {ubicacion}
 
@@ -227,8 +236,13 @@ def _sobrescribir_numeros(plan, ui, calculado):
 
 def _plan_minimo(ui, calculado):
     """Plan de emergencia si incluso la redacción falla, para no romper la app."""
+    descripcion = (
+        calculado.get("motivo_no_viable")
+        or "No se pudo generar una descripción detallada (falla temporal del servicio de redacción); "
+           "las cifras numéricas sí están calculadas y son confiables."
+    )
     plan = {
-        "rentabilidad": {},
+        "rentabilidad": {"descripcion": descripcion},
         "siembra_estimada": {},
         "dificultad": {"nivel": "Media", "descripcion": "No se pudo generar una descripción detallada."},
         "tiempos": {
@@ -245,7 +259,7 @@ def _plan_minimo(ui, calculado):
     return _sobrescribir_numeros(plan, ui, calculado)
 
 
-def redactar_plan_final(cultivo, ubicacion, ui, calculado, parametros, advertencia=False):
+def redactar_plan_final(cultivo, ubicacion, ui, calculado, parametros, advertencia=False, ganancia_atipica=False):
     """
     Devuelve el dict final EXACTAMENTE con el esquema que espera
     project_detail_page.dart / parsePlanResponse en Flutter.
@@ -253,7 +267,7 @@ def redactar_plan_final(cultivo, ubicacion, ui, calculado, parametros, advertenc
     if not OPENAI_API_KEY:
         return _plan_minimo(ui, calculado)
 
-    prompt = _construir_prompt(cultivo, ubicacion, ui, calculado, parametros, advertencia)
+    prompt = _construir_prompt(cultivo, ubicacion, ui, calculado, parametros, advertencia, ganancia_atipica)
 
     try:
         resp = requests.post(

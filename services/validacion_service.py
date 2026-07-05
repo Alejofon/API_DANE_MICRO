@@ -23,7 +23,7 @@ RANGOS = {
     "jornales_necesarios_por_ha_ciclo": (1, 250),
     "valor_jornal_cop": (30000, 200000),
     "ciclo_productivo_meses": (0.3, 96),
-    "precio_venta_kg_cop": (20, 100000),
+    "precio_venta_kg_cop": (20, 80000),
 }
 
 # Techo de sanidad para el costo de material vegetal por hectárea
@@ -119,7 +119,7 @@ def resumen_errores_para_prompt(errores):
 # -----------------------------------------------------------------
 
 # Import local (no circular: calculo_agricola no importa de aquí).
-from .calculo_agricola import construir_fallback
+from .calculo_agricola import construir_fallback, TECHO_RENDIMIENTO_POR_PLANTA_KG
 
 CAMPOS_PARA_CALCULO = [
     "distancia_entre_surcos_m",
@@ -172,8 +172,9 @@ def completar_parametros(parametros_crudos):
 
     # Rendimiento: basta con que UNO de los dos (por planta o por ha) sea
     # válido. Si ninguno lo es, se rellenan ambos desde el respaldo.
-    rp_valido = _numero_valido(completos.get("rendimiento_estimado_kg_por_planta"), 0.0001, 10_000_000)
-    rh_valido = _numero_valido(completos.get("rendimiento_estimado_kg_por_ha"), 0.0001, 500_000_000)
+    techo_por_planta = TECHO_RENDIMIENTO_POR_PLANTA_KG.get(categoria, TECHO_RENDIMIENTO_POR_PLANTA_KG["ciclo_corto"])
+    rp_valido = _numero_valido(completos.get("rendimiento_estimado_kg_por_planta"), 0.001, techo_por_planta)
+    rh_valido = _numero_valido(completos.get("rendimiento_estimado_kg_por_ha"), 1, 200_000)
     if not rp_valido and not rh_valido:
         completos["rendimiento_estimado_kg_por_planta"] = respaldo["rendimiento_estimado_kg_por_planta"]
         completos["rendimiento_estimado_kg_por_ha"] = respaldo["rendimiento_estimado_kg_por_ha"]

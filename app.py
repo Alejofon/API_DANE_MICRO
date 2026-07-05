@@ -700,6 +700,8 @@ def opciones_cultivo():
                         "ganancia_estimada_cop": calc["ganancia_estimada_cop"],
                         "area_recomendada_ha": calc["area_recomendada_ha"],
                         "campos_estimados": campos_est,
+                        "motivo_no_viable": calc.get("motivo_no_viable"),
+                        "ganancia_atipica": calc.get("ganancia_atipica", False),
                     }
                     for nombre, calc, campos_est in top
                 ],
@@ -857,6 +859,7 @@ def plan_cultivo():
             calculado=calculado,
             parametros=parametros,
             advertencia=advertencia_datos,
+            ganancia_atipica=calculado.get("ganancia_atipica", False),
         )
 
         # Metadata útil para depuración / trazabilidad (Flutter puede ignorarla).
@@ -869,6 +872,9 @@ def plan_cultivo():
             "costo_total_establecimiento_ha": calculado["costo_total_establecimiento_ha"],
             "area_disponible_ha": calculado["area_disponible_ha"],
             "area_recomendada_ha": calculado["area_recomendada_ha"],
+            "motivo_no_viable": calculado.get("motivo_no_viable"),
+            "ganancia_atipica": calculado.get("ganancia_atipica", False),
+            "presupuesto_minimo_recomendado_cop": calculado.get("presupuesto_minimo_recomendado_cop"),
         }
 
         return jsonify(plan_final)
