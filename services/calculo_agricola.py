@@ -367,7 +367,7 @@ def calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_k
         "numero_plantas_estimadas": numero_plantas_estimadas,
         "produccion_estimada_kg": round(produccion_estimada_kg, 1),
         "precio_kg_usado_cop": round(precio_kg, 1),
-        "precio_fuente": "DANE (precios_mercado del análisis de terreno)" if precio_dane_kg else "Estimado por IA de búsqueda técnica",
+        "precio_fuente": "DANE/SIPSA (tabla de precios real, actualizada a diario)" if precio_dane_kg else "Estimado por IA de búsqueda técnica",
         "ingreso_estimado_cop": round(ingreso_estimado),
         "costo_real_invertido_cop": round(costo_real_invertido),
         "ganancia_estimada_cop": round(ganancia_estimada),

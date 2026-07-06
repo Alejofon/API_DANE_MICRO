@@ -1180,8 +1180,106 @@ def plan_cultivo():
 
 
 # -----------------------------------
+# CÁLCULO DIRECTO (para la app de PRUEBAS / validación de efectividad)
+# -----------------------------------
+
+@app.route("/calculo-directo", methods=["POST"])
+def calculo_directo():
+    """
+    Endpoint de VALIDACIÓN. Recibe un cultivo ESPECÍFICO + presupuesto + área
+    (+ ubicación) y devuelve la rentabilidad calculada con EXACTAMENTE la misma
+    lógica que usa /plan-cultivo (resolver_parametros_tecnicos -> tabla curada /
+    cache / IA, completar_parametros, precio DANE real, calcular_plan), pero
+    SIN la redacción de texto por IA (más rápido y barato, ideal para hacer
+    encuestas en campo comparando contra agricultores experimentados).
+
+    A diferencia de /plan-cultivo, NO rechaza por aptitud climática: para la
+    validación el agricultor ya cultiva ese producto, así que se calcula igual
+    y la aptitud se reporta solo como dato informativo. Devuelve los números
+    crudos y los parámetros técnicos usados, para poder contrastar cada cifra.
+    """
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+
+        cultivo = str(body.get("cultivo", "")).strip()
+        departamento = str(body.get("departamento", "")).strip()
+        municipio = str(body.get("municipio", "")).strip()
+        presupuesto_raw = body.get("presupuesto")
+        area_raw = body.get("area")
+        unidad = str(body.get("unidad", "Metros cuadrados"))
+        tipo_terreno = body.get("tipo_terreno")
+        datos_analisis = body.get("datos_analisis")
+
+        if not cultivo or not departamento or not municipio:
+            return jsonify({"success": False, "error": "Se requieren cultivo, departamento y municipio"}), 400
+
+        presupuesto_cop = parsear_numero(presupuesto_raw)
+        area_disponible_m2 = area_a_m2(area_raw, unidad)
+
+        if presupuesto_cop <= 0 or area_disponible_m2 <= 0:
+            return jsonify({"success": False, "error": "presupuesto y area deben ser mayores a 0"}), 400
+
+        contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
+
+        # Mismos parámetros técnicos que /plan-cultivo (tabla -> cache -> IA).
+        parametros_crudos, origen_parametros = resolver_parametros_tecnicos(
+            cultivo, departamento, municipio, contexto_clima_suelo
+        )
+        error_busqueda = parametros_crudos.get("error") if isinstance(parametros_crudos, dict) else "respuesta no era un dict"
+
+        # Aptitud SOLO informativa (no bloquea el cálculo en modo validación).
+        apto = parametros_crudos.get("apto_para_la_zona") if isinstance(parametros_crudos, dict) else None
+        motivo_aptitud = parametros_crudos.get("motivo_aptitud") if isinstance(parametros_crudos, dict) else None
+
+        parametros, campos_estimados = completar_parametros(parametros_crudos)
+
+        # Mismo cálculo exacto que la versión real.
+        precio_dane = _buscar_precio_dane_para_cultivo(cultivo, departamento, municipio)
+        calculado = calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane)
+
+        return jsonify({
+            "success": True,
+            "cultivo": cultivo,
+            "ubicacion": f"{municipio}, {departamento}",
+            "entrada": {
+                "presupuesto_cop": presupuesto_cop,
+                "area_m2": area_disponible_m2,
+                "area_ha": round(area_disponible_m2 / 10000.0, 4),
+                "unidad_original": unidad,
+                "tipo_terreno": tipo_terreno,
+            },
+            "origen_parametros": origen_parametros,
+            "error_busqueda": error_busqueda,
+            "apto_para_la_zona": apto,
+            "motivo_aptitud": motivo_aptitud,
+            "precio_venta_kg_cop_usado": calculado.get("precio_kg_usado_cop"),
+            "precio_fuente": calculado.get("precio_fuente"),
+            "campos_estimados": campos_estimados,
+            "parametros_tecnicos_usados": {
+                "categoria_cultivo": parametros.get("categoria_cultivo"),
+                "distancia_entre_surcos_m": parametros.get("distancia_entre_surcos_m"),
+                "distancia_entre_plantas_m": parametros.get("distancia_entre_plantas_m"),
+                "costo_semilla_o_plantula_unidad_cop": parametros.get("costo_semilla_o_plantula_unidad_cop"),
+                "costo_preparacion_terreno_por_ha_cop": parametros.get("costo_preparacion_terreno_por_ha_cop"),
+                "costo_fertilizantes_por_ha_cop": parametros.get("costo_fertilizantes_por_ha_cop"),
+                "costo_agroquimicos_control_plagas_por_ha_cop": parametros.get("costo_agroquimicos_control_plagas_por_ha_cop"),
+                "jornales_necesarios_por_ha_ciclo": parametros.get("jornales_necesarios_por_ha_ciclo"),
+                "valor_jornal_cop": parametros.get("valor_jornal_cop"),
+                "rendimiento_estimado_kg_por_planta": parametros.get("rendimiento_estimado_kg_por_planta"),
+                "rendimiento_estimado_kg_por_ha": parametros.get("rendimiento_estimado_kg_por_ha"),
+                "ciclo_productivo_meses": parametros.get("ciclo_productivo_meses"),
+                "fuentes_consultadas": parametros.get("fuentes_consultadas", []),
+            },
+            "resultado": calculado,
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# -----------------------------------
 # BUSCAR INSUMOS AGRÍCOLAS CERCANOS (GOOGLE PLACES)
-# -----------------------------------   
+# -----------------------------------
 
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
