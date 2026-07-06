@@ -751,8 +751,53 @@ def opciones_cultivo():
                 mejores_por_nombre[clave] = (nombre, calculado, campos_estimados)
 
         evaluados_unicos = list(mejores_por_nombre.values())
-        evaluados_unicos.sort(key=lambda item: item[1]["ganancia_estimada_cop"], reverse=True)
-        top = evaluados_unicos[:5]
+
+        # FILTRO DE VIABILIDAD: la pantalla de opciones SOLO muestra proyectos
+        # rentables. Un proyecto es viable si no está marcado "No viable" y su
+        # ganancia estimada es positiva. Nunca se le propone al agricultor algo
+        # que no puede hacer o que da pérdida.
+        viables = [
+            (nombre, calc, campos_est)
+            for nombre, calc, campos_est in evaluados_unicos
+            if calc["nivel_rentabilidad"] != "No viable" and calc["ganancia_estimada_cop"] > 0
+        ]
+        viables.sort(key=lambda item: item[1]["ganancia_estimada_cop"], reverse=True)
+        top = viables[:5]
+
+        # Si NINGÚN cultivo es viable con este presupuesto/área, no se inventa
+        # un proyecto: se devuelve un mensaje honesto con el requisito mínimo
+        # más cercano (el candidato que menos lejos quedó de ser rentable).
+        if not top:
+            no_viables = sorted(
+                evaluados_unicos,
+                key=lambda item: item[1].get("presupuesto_minimo_recomendado_cop") or float("inf"),
+            )
+            sugerencia = None
+            if no_viables:
+                nombre_cercano, calc_cercano, _ = no_viables[0]
+                sugerencia = {
+                    "cultivo_mas_cercano": nombre_cercano,
+                    "motivo": calc_cercano.get("motivo_no_viable"),
+                    "area_minima_rentable_m2": round((calc_cercano.get("area_minima_rentable_ha") or 0) * 10000),
+                    "presupuesto_minimo_cop": calc_cercano.get("presupuesto_minimo_recomendado_cop"),
+                }
+            return jsonify({
+                "opciones": [],
+                "sin_opciones_viables": True,
+                "mensaje": (
+                    "Con el presupuesto y el área indicados no encontramos un cultivo "
+                    "rentable en esta zona. Ajusta el presupuesto o el área e intenta de nuevo."
+                ),
+                "sugerencia_minimo": sugerencia,
+                "_debug_calculo": {
+                    "zona_consultada": f"{municipio}, {departamento}",
+                    "origen_candidatos": origen_candidatos,
+                    "bracket_intensidad": bracket,
+                    "altitud_msnm": altitud,
+                    "evaluados": len(evaluados_unicos),
+                    "error_busqueda": error_busqueda,
+                },
+            })
 
         return jsonify({
             "opciones": [nombre for nombre, _, _ in top],
@@ -769,8 +814,8 @@ def opciones_cultivo():
                         "nivel_rentabilidad": calc["nivel_rentabilidad"],
                         "ganancia_estimada_cop": calc["ganancia_estimada_cop"],
                         "area_recomendada_ha": calc["area_recomendada_ha"],
+                        "area_recomendada_m2": calc["area_recomendada_m2"],
                         "campos_estimados": campos_est,
-                        "motivo_no_viable": calc.get("motivo_no_viable"),
                         "ganancia_atipica": calc.get("ganancia_atipica", False),
                     }
                     for nombre, calc, campos_est in top

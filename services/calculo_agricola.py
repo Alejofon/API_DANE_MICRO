@@ -89,19 +89,17 @@ def construir_fallback(categoria):
     return base
 
 
-# Piso realista de "área mínima rentable" por categoría, en hectáreas.
-# Coincide con las reglas de área mínima que options_prompt.dart ya exige
-# al proponer cultivos (50-100 m² ciclo corto, 200-500 m² semipermanente,
-# 5000 m²+ arbóreo/frutal, 1 ha+ extensivo). Reemplaza el cálculo puramente
-# matemático anterior, que podía dar fracciones de metro cuadrado sin
-# sentido práctico (ver corrección: no se puede comprar el 0.01% de un
-# bulto de fertilizante ni contratar una fracción de jornal).
-PISO_AREA_MINIMA_HA_POR_CATEGORIA = {
-    "ciclo_corto": 0.0075,       # ~75 m²
-    "semipermanente": 0.035,     # ~350 m²
-    "arboreo_frutal": 0.5,       # 5000 m²
-    "extensivo": 1.0,            # 1 ha
-}
+# Piso ABSOLUTO de sanidad numérica (no un filtro de negocio por categoría).
+# Antes había pisos de área por categoría (75 m² / 350 m² / 5000 m² / 1 ha)
+# que se usaban como FILTRO DE VIABILIDAD: rechazaban un cultivo si el área o
+# el presupuesto no alcanzaban esa escala fija. Eso hacía que casi todo
+# saliera "No viable" para agricultores con poco terreno o poca plata, aunque
+# económicamente SÍ pudieran sembrar una porción rentable. Se eliminó ese
+# criterio. Ahora la "escala mínima viable" se deriva de la ECONOMÍA real del
+# cultivo (punto de equilibrio: área donde la ganancia deja de ser negativa),
+# no de un piso arbitrario. Este piso absoluto solo evita absurdos numéricos
+# (sembrar 2 m²): una escala mínima de negocio con sentido práctico.
+AREA_MINIMA_SANIDAD_HA = 0.0020   # 20 m² — piso absoluto, no por categoría
 
 # Tope de sanidad para rendimiento POR PLANTA, en kg. Una planta herbácea
 # (papa, tomate, hortaliza) no puede rendir lo mismo que un árbol frutal
@@ -201,146 +199,151 @@ def calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_k
         + costo_agroquimicos_ha
     )
 
+    categoria = parametros.get("categoria_cultivo")
+
+    # --- Precio de venta (validado) -------------------------------------
+    # Tope de sanidad genérico: por encima de esto casi seguro es una
+    # alucinación de la IA, no un precio real de un cultivo común en Colombia.
+    TECHO_PRECIO_KG_COP = 80_000
+    precio_kg = precio_dane_kg or parametros.get("precio_venta_kg_cop") or 0
+    try:
+        precio_kg = float(precio_kg)
+    except (TypeError, ValueError):
+        precio_kg = 0.0
+    if precio_kg > TECHO_PRECIO_KG_COP:
+        precio_kg = TECHO_PRECIO_KG_COP
+
+    # --- Rendimiento POR HECTÁREA efectivo (validado) -------------------
+    # Se normaliza todo a kg/ha para poder razonar sobre la economía por
+    # unidad de área (necesario para el punto de equilibrio). Si el dato
+    # viene por planta, se multiplica por la densidad; si viene por ha, se
+    # usa directo. Topes de sanidad por categoría para atrapar errores de
+    # unidades de la IA.
+    rendimiento_por_planta = parametros.get("rendimiento_estimado_kg_por_planta")
+    rendimiento_por_ha_param = parametros.get("rendimiento_estimado_kg_por_ha")
+
+    def _rendimiento_valido(valor, maximo):
+        try:
+            v = float(valor)
+            return 0 < v <= maximo
+        except (TypeError, ValueError):
+            return False
+
+    techo_por_planta = TECHO_RENDIMIENTO_POR_PLANTA_KG.get(categoria, TECHO_RENDIMIENTO_POR_PLANTA_KG["ciclo_corto"])
+    if _rendimiento_valido(rendimiento_por_planta, techo_por_planta):
+        rendimiento_por_ha_efectivo = plantas_por_ha * float(rendimiento_por_planta)
+    elif _rendimiento_valido(rendimiento_por_ha_param, 200_000):
+        rendimiento_por_ha_efectivo = float(rendimiento_por_ha_param)
+    else:
+        rendimiento_por_ha_efectivo = 0.0
+
+    ingreso_por_ha = rendimiento_por_ha_efectivo * precio_kg
+
     # --- Costos fijos vs variables --------------------------------------
-    # Sembrar una parcela pequeña NO cuesta simplemente "área% del costo
-    # por hectárea": existen costos que no bajan proporcionalmente al
-    # reducir el área (transporte, análisis de suelo, herramientas,
-    # desplazamiento, jornales mínimos indivisibles). Se modela un 10%
-    # del costo por hectárea como costo fijo único, y el 90% restante sí
-    # escala con el área. Es una simplificación deliberada, pero evita que
-    # "microparcelas" parezcan viables solo porque todo escalaba a cero.
-    FRACCION_COSTO_FIJO = 0.10
-    costo_fijo_cop = FRACCION_COSTO_FIJO * costo_total_por_ha
-    costo_variable_por_ha = (1 - FRACCION_COSTO_FIJO) * costo_total_por_ha
+    # Sembrar una parcela pequeña NO cuesta "área% del costo por hectárea":
+    # hay costos indivisibles (transporte, análisis de suelo, herramientas,
+    # jornales mínimos). Se modela como un monto ABSOLUTO pequeño ($150.000),
+    # no como un % del costo/ha. Antes se usaba 10% del costo/ha, pero eso
+    # explotaba en cultivos caros: un cultivo de $15M/ha tenía $1,5M de "costo
+    # fijo", bloqueando a cualquiera con menos de $1,5M de presupuesto aunque
+    # pudiera sembrar una parcela pequeña rentable. El costo fijo real de
+    # arrancar una micro-parcela es del orden de cientos de miles, no millones.
+    COSTO_FIJO_ABSOLUTO_COP = 150000
+    costo_fijo_cop = min(COSTO_FIJO_ABSOLUTO_COP, 0.5 * costo_total_por_ha)
+    costo_variable_por_ha = max(costo_total_por_ha - costo_fijo_cop, 0.0)
 
     def costo_de_area(area_ha):
         if area_ha <= 0:
             return 0.0
         return costo_fijo_cop + costo_variable_por_ha * area_ha
 
-    # --- Piso de escala mínima práctica + presupuesto mínimo REAL -------
-    # Antes solo se limitaba el área a lo financiable (presupuesto/costo),
-    # lo cual matemáticamente siempre "encuentra" un área positiva por
-    # pequeña que sea. Ahora se compara el presupuesto contra el costo real
-    # de establecer la escala mínima práctica: si no alcanza, el proyecto
-    # es "No viable" de una vez, en vez de reducir el área infinitamente.
-    categoria = parametros.get("categoria_cultivo")
-    piso_area_ha = PISO_AREA_MINIMA_HA_POR_CATEGORIA.get(categoria, PISO_AREA_MINIMA_HA_POR_CATEGORIA["ciclo_corto"])
-    presupuesto_minimo_piso_cop = costo_de_area(piso_area_ha)
-
-    tierra_insuficiente = area_disponible_ha < piso_area_ha
-    presupuesto_insuficiente = presupuesto < presupuesto_minimo_piso_cop
-
+    # --- Economía real: margen por hectárea y punto de equilibrio -------
+    # ganancia(A) = (ingreso_por_ha - costo_variable_por_ha) * A - costo_fijo
+    # margen_variable_por_ha = pendiente de esa recta. Si es <= 0, el cultivo
+    # PIERDE a cualquier escala (ni siquiera cubre sus costos variables): es
+    # verdaderamente inviable en esta zona a este precio. Si es > 0, existe un
+    # ÁREA DE EQUILIBRIO a partir de la cual hay ganancia; ese es el mínimo
+    # económico real (no un piso arbitrario por categoría).
+    margen_variable_por_ha = ingreso_por_ha - costo_variable_por_ha
     ganancia_atipica = False
 
-    if tierra_insuficiente or presupuesto_insuficiente:
-        area_financiable_ha = max((presupuesto - costo_fijo_cop) / costo_variable_por_ha, 0.0) if costo_variable_por_ha > 0 else 0.0
+    if margen_variable_por_ha > 0:
+        area_equilibrio_ha = costo_fijo_cop / margen_variable_por_ha
+        area_min_viable_ha = max(area_equilibrio_ha, AREA_MINIMA_SANIDAD_HA)
+    else:
+        area_equilibrio_ha = None
+        area_min_viable_ha = AREA_MINIMA_SANIDAD_HA
+
+    # Área que el presupuesto financia (tope por dinero) y área máxima
+    # plantable (tope por dinero Y por tierra). La TIERRA es solo un TOPE:
+    # siempre se puede usar MENOS de la disponible; no se descarta un
+    # proyecto por no cubrir todo el terreno.
+    if costo_variable_por_ha > 0:
+        area_financiable_ha = max((presupuesto - costo_fijo_cop) / costo_variable_por_ha, 0.0)
+    else:
+        area_financiable_ha = area_disponible_ha
+    area_max_plantable_ha = min(area_financiable_ha, area_disponible_ha)
+
+    presupuesto_minimo_viable_cop = costo_de_area(area_min_viable_ha)
+
+    # --- Filtros de viabilidad (en orden) -------------------------------
+    if rendimiento_por_ha_efectivo <= 0 or precio_kg <= 0:
+        viable = False
+        motivo_no_viable = (
+            "No hay datos suficientes de rendimiento o precio de venta para "
+            "estimar la rentabilidad de este cultivo."
+        )
+    elif margen_variable_por_ha <= 0:
+        viable = False
+        motivo_no_viable = (
+            f"A un precio de venta de ~${precio_kg:,.0f}/kg, este cultivo no cubre ni "
+            f"sus costos variables: no es rentable a ninguna escala en esta zona."
+        )
+    elif area_disponible_ha < area_min_viable_ha:
+        viable = False
+        motivo_no_viable = (
+            f"Este cultivo necesita al menos ~{area_min_viable_ha * 10000:.0f} m² para ser "
+            f"rentable (punto de equilibrio), pero solo hay "
+            f"{area_disponible_ha * 10000:.0f} m² disponibles."
+        )
+    elif area_financiable_ha < area_min_viable_ha:
+        viable = False
+        motivo_no_viable = (
+            f"El presupuesto (${presupuesto:,.0f} COP) no alcanza para sembrar la escala "
+            f"mínima rentable de este cultivo (~{area_min_viable_ha * 10000:.0f} m², "
+            f"${presupuesto_minimo_viable_cop:,.0f} COP)."
+        )
+    else:
+        viable = True
+        motivo_no_viable = None
+
+    if not viable:
         area_recomendada_ha = 0.0
         numero_plantas_estimadas = 0
         produccion_estimada_kg = 0.0
-        precio_kg = float(precio_dane_kg or parametros.get("precio_venta_kg_cop") or 0)
         ingreso_estimado = 0.0
         costo_real_invertido = 0.0
         ganancia_estimada = 0.0
         nivel_rentabilidad = "No viable"
         retorno_inversion_meses = None
-
-        if tierra_insuficiente and presupuesto_insuficiente:
-            motivo_no_viable = (
-                f"El área disponible ({area_disponible_ha * 10000:.0f} m²) y el presupuesto "
-                f"(${presupuesto:,.0f} COP) son insuficientes: se necesitan al menos "
-                f"~{piso_area_ha * 10000:.0f} m² y ${presupuesto_minimo_piso_cop:,.0f} COP "
-                f"para establecer este cultivo a su escala mínima práctica."
-            )
-        elif tierra_insuficiente:
-            motivo_no_viable = (
-                f"El área disponible ({area_disponible_ha * 10000:.0f} m²) es menor a la "
-                f"escala mínima práctica de este cultivo (~{piso_area_ha * 10000:.0f} m²)."
-            )
-        else:
-            motivo_no_viable = (
-                f"El presupuesto (${presupuesto:,.0f} COP) es menor al mínimo real para "
-                f"sembrar la escala mínima práctica de este cultivo "
-                f"(~{piso_area_ha * 10000:.0f} m², ${presupuesto_minimo_piso_cop:,.0f} COP)."
-            )
     else:
-        motivo_no_viable = None
-
-        area_financiable_ha = (
-            max((presupuesto - costo_fijo_cop) / costo_variable_por_ha, 0.0)
-            if costo_variable_por_ha > 0 else area_disponible_ha
-        )
-        area_recomendada_ha = min(area_financiable_ha, area_disponible_ha)
-        area_recomendada_ha = max(area_recomendada_ha, piso_area_ha)
-        area_recomendada_ha = min(area_recomendada_ha, area_disponible_ha)  # nunca exceder lo disponible
-
-        numero_plantas_estimadas = round(area_recomendada_ha * plantas_por_ha)
-        if area_recomendada_ha > 0 and numero_plantas_estimadas <= 0:
-            numero_plantas_estimadas = max(round(area_recomendada_ha * plantas_por_ha), 1)
-
-        # --- Rendimiento: validado, no aceptado a ciegas -----------------
-        # Rangos de sanidad amplios pero reales: una planta que rinda más
-        # de 300 kg, o una hectárea que rinda más de 200 toneladas, casi
-        # seguro es un error de unidades de la IA, no un dato real.
-        rendimiento_por_planta = parametros.get("rendimiento_estimado_kg_por_planta")
-        rendimiento_por_ha = parametros.get("rendimiento_estimado_kg_por_ha")
-
-        def _rendimiento_valido(valor, maximo):
-            try:
-                v = float(valor)
-                return 0 < v <= maximo
-            except (TypeError, ValueError):
-                return False
-
-        # Tope por categoría: una planta herbácea (papa, tomate, hortaliza)
-        # no puede rendir lo mismo que un árbol frutal maduro. Un tope único
-        # para todos permitía absurdos como "150 kg/planta" en un cultivo
-        # de ciclo corto.
-        techo_por_planta = TECHO_RENDIMIENTO_POR_PLANTA_KG.get(categoria, TECHO_RENDIMIENTO_POR_PLANTA_KG["ciclo_corto"])
-
-        if _rendimiento_valido(rendimiento_por_planta, techo_por_planta):
-            produccion_estimada_kg = numero_plantas_estimadas * float(rendimiento_por_planta)
-        elif _rendimiento_valido(rendimiento_por_ha, 200_000):
-            produccion_estimada_kg = area_recomendada_ha * float(rendimiento_por_ha)
-        else:
-            produccion_estimada_kg = 0.0
-
-        # --- Precio: validado, no aceptado a ciegas ----------------------
-        # Tope de sanidad genérico (no específico por cultivo): por encima
-        # de esto, casi seguro es una alucinación de la IA, no un precio
-        # real de un cultivo agrícola común en Colombia.
-        TECHO_PRECIO_KG_COP = 80_000
-        precio_kg = precio_dane_kg or parametros.get("precio_venta_kg_cop") or 0
-        try:
-            precio_kg = float(precio_kg)
-        except (TypeError, ValueError):
-            precio_kg = 0.0
-        if precio_kg > TECHO_PRECIO_KG_COP:
-            precio_kg = TECHO_PRECIO_KG_COP
-
+        # Se recomienda sembrar TODO lo que el presupuesto y la tierra
+        # permitan (en el modelo lineal, más área = más ganancia una vez
+        # superado el equilibrio). Esto responde directamente la pregunta
+        # "¿cuánto de mi terreno puedo usar con mi presupuesto?": si el
+        # dinero no cubre todo el terreno, se recomienda la porción que sí.
+        area_recomendada_ha = area_max_plantable_ha
+        numero_plantas_estimadas = max(round(area_recomendada_ha * plantas_por_ha), 1)
+        produccion_estimada_kg = area_recomendada_ha * rendimiento_por_ha_efectivo
         ingreso_estimado = produccion_estimada_kg * precio_kg
         costo_real_invertido = costo_de_area(area_recomendada_ha)
-
-        # --- Validación final de coherencia ------------------------------
-        # No debería ocurrir dado que area_recomendada_ha ya respeta el
-        # presupuesto, pero se deja como red de seguridad explícita.
         if costo_real_invertido > presupuesto:
             costo_real_invertido = presupuesto
-        if area_recomendada_ha > area_disponible_ha:
-            area_recomendada_ha = area_disponible_ha
 
         ganancia_estimada = ingreso_estimado - costo_real_invertido
-
-        if produccion_estimada_kg <= 0:
-            nivel_rentabilidad = "No viable"
-            motivo_no_viable = (
-                "No fue posible estimar una producción mayor a cero con los "
-                "datos de rendimiento disponibles para este cultivo."
-            )
-        else:
-            nivel_rentabilidad = _clasificar_rentabilidad(ganancia_estimada, costo_real_invertido)
-            if costo_real_invertido > 0 and (ganancia_estimada / costo_real_invertido) > 10:
-                ganancia_atipica = True
+        nivel_rentabilidad = _clasificar_rentabilidad(ganancia_estimada, costo_real_invertido)
+        if costo_real_invertido > 0 and (ganancia_estimada / costo_real_invertido) > 10:
+            ganancia_atipica = True
 
         # --- Retorno de inversión: por ciclos, no "una cosecha alcanza" --
         if ganancia_estimada > 0 and ciclo_meses > 0:
@@ -372,8 +375,8 @@ def calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_k
         "nivel_rentabilidad": nivel_rentabilidad,
         "motivo_no_viable": motivo_no_viable,
         "retorno_inversion_meses": retorno_inversion_meses,
-        "area_minima_rentable_ha": round(piso_area_ha, 4),
-        "presupuesto_minimo_recomendado_cop": round(presupuesto_minimo_piso_cop),
+        "area_minima_rentable_ha": round(area_min_viable_ha, 4),
+        "presupuesto_minimo_recomendado_cop": round(presupuesto_minimo_viable_cop),
         "ciclo_productivo_meses": ciclo_meses,
     }
 
