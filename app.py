@@ -4,14 +4,29 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
-from services.clima_service import get_climate_data
+from services.clima_service import get_climate_data, get_elevation
 from services.soil_service import get_soil_data
 from services.inputs_service import get_inputs_index
-from services.agro_technical_service import obtener_parametros_tecnicos, obtener_candidatos_cultivo
+from services.agro_technical_service import (
+    obtener_parametros_tecnicos,
+    obtener_candidatos_cultivo,
+    resolver_parametros_tecnicos,
+)
 from services.validacion_service import completar_parametros
 from services.calculo_agricola import calcular_plan, formatear_resultados_para_ui, construir_candidatos_respaldo
 from services.utils_numeros import parsear_numero, area_a_m2
 from services.redaccion_service import redactar_plan_final, plan_no_apto
+from services.tabla_referencia_cultivos import (
+    buscar_en_tabla,
+    es_apto_por_altitud,
+    es_apto_por_temperatura,
+    candidatos_por_altitud,
+)
+from services.cache_tecnico_service import (
+    asegurar_tabla as asegurar_tabla_cache,
+    obtener_candidatos as obtener_candidatos_cache,
+    guardar_candidatos as guardar_candidatos_cache,
+)
 import requests
 from flask import jsonify, request
 
@@ -33,6 +48,13 @@ def get_db_connection():
     """Retorna una conexión a PostgreSQL con cursor de diccionario"""
     conn = psycopg2.connect(DATABASE_URL)
     return conn
+
+# Crea la tabla de cache de parámetros técnicos si no existe (idempotente).
+# Se hace al importar el módulo para que el primer request ya la tenga lista.
+try:
+    asegurar_tabla_cache()
+except Exception as _e:
+    print(f"[startup] No se pudo asegurar la tabla de cache: {_e}")
 
 # -----------------------------------
 # HOME
@@ -604,23 +626,24 @@ def analisis_terreno():
 def opciones_cultivo():
     """
     Reemplaza la llamada directa Flutter -> OpenAI de OptionsPage.
-    Flujo:
-      1. Pide a una IA con búsqueda web (mismas fuentes confiables que
-         /plan-cultivo) entre 6 y 8 cultivos candidatos apropiados para el
-         clima/suelo de la zona, con sus parámetros técnicos crudos.
-      2. Completa cada candidato con completar_parametros: si a la IA le
-         faltó un dato (frecuente en zonas menos documentadas), se rellena
-         con el valor genérico de su categoría en vez de descartar el
-         candidato completo. Se registra qué se estimó, para transparencia.
-      3. Calcula la rentabilidad real de cada uno con calculo_agricola.py.
-      4. Ordena TODOS por ganancia estimada (sin descartar "No viable": se
-         muestra la etiqueta tal cual, igual que ya hace history_page.dart
-         con sus colores) y devuelve los 5 mejores.
 
-    Solo si la búsqueda web falla por completo (error de red, JSON inválido,
-    cero candidatos) se usa un pequeño set de nombres genéricamente comunes
-    en el agro colombiano (construir_candidatos_respaldo), siempre marcado
-    con advertencia. La app SIEMPRE devuelve algo.
+    La IA es la GENERADORA DE IDEAS (ahí está el valor: propone cultivos
+    novedosos/de nicho apropiados al clima Y a la relación presupuesto↔terreno,
+    no solo lo obvio que el agricultor ya conoce). La tabla curada NO limita
+    las ideas: solo aporta NÚMEROS confiables cuando un cultivo propuesto está
+    en ella. Flujo:
+      1. Genera candidatos con la IA (consciente de presupuesto/área para
+         proponer sistemas intensivos vs extensivos según el perfil). El set
+         se cachea por zona+intensidad, así que la 2da vez es instantáneo.
+      2. Para cada candidato: si está en la tabla curada, se usan SUS cifras
+         (confiables); si no, las que trajo la IA. Se completan huecos con
+         completar_parametros.
+      3. Calcula la rentabilidad real de cada uno con calculo_agricola.py.
+      4. Devuelve los 5 mejores por ganancia estimada.
+
+    Si la IA falla del todo (sin API key, timeout, red), cae a la tabla curada
+    filtrada por clima; y si ni eso, a un respaldo genérico. La app SIEMPRE
+    devuelve algo.
     """
     try:
         body = request.get_json(force=True, silent=True) or {}
@@ -644,31 +667,75 @@ def opciones_cultivo():
 
         contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
 
-        resultado_busqueda = obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo, tipo_terreno)
-        candidatos_crudos = resultado_busqueda.get("candidatos", []) if isinstance(resultado_busqueda, dict) else []
+        lat = body.get("lat")
+        lon = body.get("lon")
+        altitud = get_elevation(lat, lon) if (lat is not None and lon is not None) else None
+        temperatura = _temperatura_de_analisis(datos_analisis)
 
-        pares = []  # (nombre, parametros_crudos_o_None)
+        usando_respaldo_total = False
+        error_busqueda = None
+
+        # ---------------------------------------------------------
+        # 1. IDEAS: cache de candidatos IA por zona+intensidad; si no hay,
+        #    se le piden a la IA (consciente de presupuesto/terreno). La IA
+        #    es la fuente de novedad; el cache evita repetir el costo/espera.
+        # ---------------------------------------------------------
+        bracket = _bracket_intensidad(presupuesto_cop, area_disponible_m2)
+        candidatos_crudos = obtener_candidatos_cache(departamento, municipio, bracket)
+        origen_candidatos = "cache_ia" if candidatos_crudos else None
+
+        if not candidatos_crudos:
+            resultado_busqueda = obtener_candidatos_cultivo(
+                departamento, municipio, contexto_clima_suelo, tipo_terreno,
+                presupuesto_cop=presupuesto_cop, area_m2=area_disponible_m2,
+            )
+            candidatos_crudos = resultado_busqueda.get("candidatos", []) if isinstance(resultado_busqueda, dict) else []
+            error_busqueda = resultado_busqueda.get("error") if isinstance(resultado_busqueda, dict) else None
+            if candidatos_crudos:
+                origen_candidatos = "ia_busqueda"
+                try:
+                    guardar_candidatos_cache(departamento, municipio, bracket, candidatos_crudos)
+                except Exception as _e:
+                    print(f"[opciones-cultivo] No se pudo cachear candidatos: {_e}")
+
+        # Armar la lista (nombre, parametros). Si el candidato está en la
+        # tabla curada, se usan SUS números (confiables) en vez de los de la IA.
+        pares = []  # (nombre, parametros_crudos, fuente_numeros)
         for candidato in candidatos_crudos:
             nombre = str(candidato.get("nombre_cultivo", "")).strip()
-            if nombre:
-                pares.append((nombre, candidato))
+            if not nombre:
+                continue
+            en_tabla = buscar_en_tabla(nombre)
+            if en_tabla:
+                pares.append((nombre, en_tabla, "tabla_curada"))
+            else:
+                pares.append((nombre, candidato, "ia_busqueda"))
 
-        # Búsqueda falló por completo: usar respaldo de nombres genéricos.
-        usando_respaldo_total = len(pares) == 0
-        error_busqueda = resultado_busqueda.get("error") if isinstance(resultado_busqueda, dict) else None
-        if usando_respaldo_total:
-            # 🔎 Esto queda en los logs de Render (Logs -> busca "FALLBACK TOTAL")
-            # para poder ver la causa real en vez de adivinar.
+        # ---------------------------------------------------------
+        # 2. Fallback si la IA no dio nada: tabla curada filtrada por clima.
+        # ---------------------------------------------------------
+        if not pares:
+            candidatos_tabla = candidatos_por_altitud(altitud, temperatura)
+            if candidatos_tabla:
+                origen_candidatos = "fallback_tabla_curada"
+                for nombre, params in candidatos_tabla:
+                    pares.append((nombre, params, "tabla_curada"))
+
+        # 3. Último recurso: respaldo genérico (la app nunca se queda vacía).
+        if not pares:
+            usando_respaldo_total = True
+            origen_candidatos = "respaldo_generico"
             print(f"[opciones-cultivo] FALLBACK TOTAL para {municipio}, {departamento}. Motivo: {error_busqueda}")
-            pares = construir_candidatos_respaldo()
+            for nombre, params in construir_candidatos_respaldo():
+                pares.append((nombre, params, "respaldo_generico"))
 
         evaluados = []
-        for nombre, parametros_crudos in pares:
+        for nombre, parametros_crudos, fuente_numeros in pares:
             parametros_completos, campos_estimados = completar_parametros(parametros_crudos)
             if usando_respaldo_total:
                 campos_estimados = ["todos (respaldo genérico, búsqueda no disponible)"]
 
-            precio_dane = _buscar_precio_dane_para_cultivo(datos_analisis, nombre)
+            precio_dane = _buscar_precio_dane_para_cultivo(nombre, departamento, municipio)
             calculado = calcular_plan(
                 parametros_completos, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane
             )
@@ -691,6 +758,9 @@ def opciones_cultivo():
             "opciones": [nombre for nombre, _, _ in top],
             "_debug_calculo": {
                 "zona_consultada": f"{municipio}, {departamento}",
+                "origen_candidatos": origen_candidatos,
+                "bracket_intensidad": bracket,
+                "altitud_msnm": altitud,
                 "usando_respaldo_total": usando_respaldo_total,
                 "error_busqueda": error_busqueda,
                 "candidatos": [
@@ -743,26 +813,176 @@ def _formatear_contexto_clima_suelo(datos_analisis):
     return "\n".join(partes) if partes else None
 
 
-def _buscar_precio_dane_para_cultivo(datos_analisis, cultivo):
+def _bracket_intensidad(presupuesto_cop, area_m2):
     """
-    Si el cultivo consultado coincide (por nombre) con algún producto
-    reportado en precios_mercado.por_grupo del análisis de terreno,
-    se usa ESE precio real del DANE en vez del que estime la IA.
-    Es solo un match por nombre; si no hay coincidencia, retorna None
-    y el cálculo usa el precio que trajo agro_technical_service.
+    Clasifica la relación presupuesto↔terreno en un 'bracket' de intensidad
+    ($/m²) para (a) darle contexto a la IA y (b) cachear los candidatos por
+    perfil: dos usuarios con la misma zona y perfil de inversión reciben el
+    mismo set de ideas sin volver a gastar una llamada de IA.
+    """
+    try:
+        inversion_por_m2 = float(presupuesto_cop) / float(area_m2) if area_m2 else 0
+    except (TypeError, ValueError, ZeroDivisionError):
+        inversion_por_m2 = 0
+    # Cultivos de campo abierto en Colombia cuestan ~$200-2200/m² todo incluido.
+    # Tener bastante más que eso disponible por m² => hay margen para
+    # intensificar (hidroponía, invernadero, alto valor). Tener mucho menos =>
+    # el fuerte es el área, conviene extensivo de bajo insumo.
+    if inversion_por_m2 >= 5000:
+        return "intensivo"      # poca área, buen presupuesto
+    if inversion_por_m2 <= 500:
+        return "extensivo"      # mucha área, presupuesto ajustado
+    return "mixto"
+
+
+def _temperatura_de_analisis(datos_analisis):
+    """
+    Temperatura media (°C) del bloque datos_analisis, para verificar aptitud
+    climática cuando no se dispone de altitud. Retorna float o None.
+    Usa el promedio de max/min diarios si están; si no, la temperatura actual.
     """
     if not datos_analisis:
         return None
+    clima = (datos_analisis.get("clima") or {}).get("data") or {}
+    daily = clima.get("daily") or {}
+    tmax = daily.get("temperature_max")
+    tmin = daily.get("temperature_min")
+    try:
+        if tmax is not None and tmin is not None:
+            return (float(tmax) + float(tmin)) / 2.0
+    except (TypeError, ValueError):
+        pass
+    actual = (clima.get("current") or {}).get("temperature")
+    try:
+        return float(actual) if actual is not None else None
+    except (TypeError, ValueError):
+        return None
 
-    cultivo_norm = cultivo.strip().lower()
-    por_grupo = (datos_analisis.get("precios_mercado") or {}).get("por_grupo") or {}
 
-    for _, info_grupo in por_grupo.items():
-        for lista_key in ("productos_mas_caros", "productos_mas_baratos"):
-            for producto in info_grupo.get(lista_key, []):
-                nombre = str(producto.get("producto", "")).strip().lower()
-                if nombre and (nombre in cultivo_norm or cultivo_norm in nombre):
-                    return producto.get("precio_promedio")
+# SIPSA/DANE solo reporta precios en las ~20 ciudades con central mayorista
+# propia (Corabastos-Bogotá, Medellín, Cali, etc.) — el nombre que aparece en
+# dept_nombre es el departamento de ESA central, no el departamento de la
+# finca. Departamentos sin central propia (ej. Cundinamarca: Villapinzón,
+# Chocontá, Tocancipá) nunca calzan por nombre exacto y antes caían directo
+# a precio nacional. Este mapa los conecta con la central mayorista real más
+# cercana (aproximación geográfica documentada, no un dato oficial en sí)
+# ANTES de rendirse al promedio nacional.
+DEPARTAMENTO_A_MERCADO_DANE = {
+    "AMAZONAS": None,
+    "ANTIOQUIA": "ANTIOQUIA",
+    "ARAUCA": "META",
+    "ATLANTICO": "ATLÁNTICO",
+    "ATLÁNTICO": "ATLÁNTICO",
+    "BOGOTA": "BOGOT",
+    "BOGOTÁ": "BOGOT",
+    "BOGOTA, D.C.": "BOGOT",
+    "BOGOTÁ, D.C.": "BOGOT",
+    "BOLIVAR": "BOLÍVAR",
+    "BOLÍVAR": "BOLÍVAR",
+    "BOYACA": "BOYACÁ",
+    "BOYACÁ": "BOYACÁ",
+    "CALDAS": "CALDAS",
+    "CAQUETA": "HUILA",
+    "CAQUETÁ": "HUILA",
+    "CASANARE": "META",
+    "CAUCA": "CAUCA",
+    "CESAR": "CESAR",
+    "CHOCO": "ANTIOQUIA",
+    "CHOCÓ": "ANTIOQUIA",
+    "CORDOBA": "CÓRDOBA",
+    "CÓRDOBA": "CÓRDOBA",
+    "CUNDINAMARCA": "BOGOT",
+    "GUAINIA": None,
+    "GUAINÍA": None,
+    "GUAVIARE": "META",
+    "HUILA": "HUILA",
+    "LA GUAJIRA": "MAGDALENA",
+    "GUAJIRA": "MAGDALENA",
+    "MAGDALENA": "MAGDALENA",
+    "META": "META",
+    "NARINO": "NARIÑO",
+    "NARIÑO": "NARIÑO",
+    "NORTE DE SANTANDER": "NORTE DE SANTANDER",
+    "PUTUMAYO": "NARIÑO",
+    "QUINDIO": "QUINDÍO",
+    "QUINDÍO": "QUINDÍO",
+    "RISARALDA": "RISARALDA",
+    "SAN ANDRES Y PROVIDENCIA": None,
+    "SAN ANDRÉS Y PROVIDENCIA": None,
+    "SANTANDER": "SANTANDER",
+    "SUCRE": "SUCRE",
+    "TOLIMA": "TOLIMA",
+    "VALLE DEL CAUCA": "VALLE DEL CAUCA",
+    "VAUPES": None,
+    "VAUPÉS": None,
+    "VICHADA": "META",
+}
+
+
+def _buscar_precio_dane_para_cultivo(cultivo, departamento=None, municipio=None):
+    """
+    Consulta DIRECTAMENTE la tabla dane_normalizado (SIPSA/DANE, actualizada
+    a diario por el ETL) por el precio promedio real del cultivo pedido.
+
+    Antes esta función solo comparaba contra los top-3 más caros/baratos que
+    ya traía /analisis-terreno por grupo de producto — si el cultivo no
+    quedaba entre esos 6, el precio real del DANE (que sí existía en la
+    tabla) nunca se usaba y el cálculo caía en el precio inventado por la IA.
+
+    Cascada geográfica: municipio -> departamento exacto -> mercado mayorista
+    de referencia más cercano (DEPARTAMENTO_A_MERCADO_DANE) -> nacional
+    (mejor un precio nacional real que uno alucinado). Se limita a los
+    últimos 18 meses para no usar precios desactualizados.
+    Retorna el precio promedio (float) o None si no hay ningún dato.
+    """
+    cultivo_norm = (cultivo or "").strip()
+    if not cultivo_norm:
+        return None
+
+    terminos_nombre = [f"%{cultivo_norm}%"]
+    primera_palabra = cultivo_norm.split()[0]
+    if primera_palabra.lower() != cultivo_norm.lower():
+        terminos_nombre.append(f"%{primera_palabra}%")
+
+    niveles_geo = []
+    if municipio:
+        niveles_geo.append(("muni_nombre", municipio))
+    if departamento:
+        niveles_geo.append(("dept_nombre", departamento))
+        mercado_referencia = DEPARTAMENTO_A_MERCADO_DANE.get(departamento.strip().upper())
+        if mercado_referencia and mercado_referencia.upper() != departamento.strip().upper():
+            niveles_geo.append(("dept_nombre", mercado_referencia))
+    niveles_geo.append((None, None))  # nacional, sin filtro geográfico
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        for columna_geo, valor_geo in niveles_geo:
+            for termino in terminos_nombre:
+                query = """
+                    SELECT AVG(promedio_kg) AS precio_promedio, COUNT(*) AS num_registros
+                    FROM dane_normalizado
+                    WHERE arti_nombre ILIKE %s
+                      AND enma_fecha >= (CURRENT_DATE - INTERVAL '18 months')
+                """
+                params = [termino]
+                if columna_geo:
+                    query += f" AND {columna_geo} ILIKE %s"
+                    params.append(f"%{valor_geo}%")
+
+                cursor.execute(query, params)
+                fila = cursor.fetchone()
+                if fila and fila["num_registros"] and fila["precio_promedio"]:
+                    cursor.close()
+                    conn.close()
+                    return float(fila["precio_promedio"])
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"[_buscar_precio_dane_para_cultivo] Error consultando dane_normalizado: {e}")
+
     return None
 
 
@@ -811,12 +1031,41 @@ def plan_cultivo():
         contexto_clima_suelo = _formatear_contexto_clima_suelo(datos_analisis)
 
         # ---------------------------------------------------------
-        # 1-2. Parámetros técnicos + relleno transparente de lo faltante
+        # 0. Aptitud climática con ALTITUD REAL (Open-Meteo), sin IA.
+        #    Si el cultivo está en la tabla curada y su rango de altitud no
+        #    cuadra con la elevación real de la zona, se corta aquí mismo
+        #    (ej. "Cacao" a 2600 msnm) sin gastar una llamada de IA.
         # ---------------------------------------------------------
-        parametros_crudos = obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo)
+        lat = body.get("lat")
+        lon = body.get("lon")
+        en_tabla = buscar_en_tabla(cultivo)
+        if en_tabla:
+            altitud = get_elevation(lat, lon) if (lat is not None and lon is not None) else None
+            if altitud is not None:
+                apto, motivo_alt = es_apto_por_altitud(en_tabla, altitud)
+            else:
+                apto, motivo_alt = es_apto_por_temperatura(en_tabla, _temperatura_de_analisis(datos_analisis))
+            if apto is False:
+                plan_final = plan_no_apto(cultivo, motivo_alt, municipio, departamento)
+                plan_final["_debug_calculo"] = {
+                    "zona_consultada": f"{municipio}, {departamento}",
+                    "apto_para_la_zona": False,
+                    "motivo_aptitud": motivo_alt,
+                    "altitud_msnm": altitud,
+                    "origen_parametros": "tabla_curada",
+                }
+                return jsonify(plan_final)
+
+        # ---------------------------------------------------------
+        # 1-2. Parámetros técnicos: tabla curada -> cache -> IA de búsqueda.
+        #      Solo se llama a la IA si el cultivo no está curado ni cacheado.
+        # ---------------------------------------------------------
+        parametros_crudos, origen_parametros = resolver_parametros_tecnicos(
+            cultivo, departamento, municipio, contexto_clima_suelo
+        )
         error_busqueda = parametros_crudos.get("error") if isinstance(parametros_crudos, dict) else "respuesta no era un dict"
         if error_busqueda:
-            print(f"[plan-cultivo] Búsqueda sin datos usables para '{cultivo}' en {municipio}, {departamento}. Motivo: {error_busqueda}")
+            print(f"[plan-cultivo] Sin datos usables para '{cultivo}' en {municipio}, {departamento} (origen={origen_parametros}). Motivo: {error_busqueda}")
 
         # Corte temprano: si la IA determinó que el cultivo NO es apto para
         # el clima/suelo de la zona, no tiene sentido calcular costos ni
@@ -835,6 +1084,7 @@ def plan_cultivo():
                 "zona_consultada": f"{municipio}, {departamento}",
                 "apto_para_la_zona": False,
                 "motivo_aptitud": parametros_crudos.get("motivo_aptitud"),
+                "origen_parametros": origen_parametros,
             }
             return jsonify(plan_final)
 
@@ -844,7 +1094,7 @@ def plan_cultivo():
         # ---------------------------------------------------------
         # 3. Cálculo real en Python
         # ---------------------------------------------------------
-        precio_dane = _buscar_precio_dane_para_cultivo(datos_analisis, cultivo)
+        precio_dane = _buscar_precio_dane_para_cultivo(cultivo, departamento, municipio)
         calculado = calcular_plan(parametros, presupuesto_cop, area_disponible_m2, precio_dane_kg=precio_dane)
         ui = formatear_resultados_para_ui(calculado, parametros)
 
@@ -865,6 +1115,7 @@ def plan_cultivo():
         # Metadata útil para depuración / trazabilidad (Flutter puede ignorarla).
         plan_final["_debug_calculo"] = {
             "zona_consultada": f"{municipio}, {departamento}",
+            "origen_parametros": origen_parametros,
             "advertencia_datos_genericos": advertencia_datos,
             "error_busqueda": error_busqueda,
             "campos_estimados": campos_estimados,

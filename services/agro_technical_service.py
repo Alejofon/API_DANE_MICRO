@@ -305,6 +305,60 @@ def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima
 
 
 # -----------------------------------------------------------------
+# RESOLVER UNIFICADO: tabla curada -> cache Postgres -> IA de búsqueda.
+# Este es el punto de entrada que debe usar app.py. Evita llamar a la IA
+# (lenta y con costo) cuando el cultivo ya está en la tabla curada o ya fue
+# resuelto antes en esa zona (cache). Solo la PRIMERA consulta de un cultivo
+# no-curado en una zona nueva gasta una llamada real; las siguientes salen
+# del cache.
+# -----------------------------------------------------------------
+
+def resolver_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo=None):
+    """
+    Devuelve (parametros: dict, origen: str).
+    origen ∈ {"tabla_curada", "cache", "ia_busqueda", "ia_busqueda_sin_cache"}.
+    Si todo falla, `parametros` trae {"error": ...} y el llamador usa el
+    fallback genérico de completar_parametros (la app nunca se rompe).
+    """
+    # Import local para evitar acoplar este módulo a la BD cuando se use suelto.
+    try:
+        from .tabla_referencia_cultivos import buscar_en_tabla
+    except Exception:
+        buscar_en_tabla = lambda _n: None
+
+    # 1) Tabla curada (instantánea, gratis, sin alucinaciones).
+    en_tabla = buscar_en_tabla(cultivo)
+    if en_tabla:
+        en_tabla.setdefault("apto_para_la_zona", True)
+        en_tabla.setdefault("motivo_aptitud", "Cultivo incluido en la tabla de referencia curada.")
+        return en_tabla, "tabla_curada"
+
+    # 2) Cache en Postgres de respuestas de IA ya validadas para esta zona.
+    try:
+        from .cache_tecnico_service import obtener as cache_obtener, guardar as cache_guardar
+    except Exception:
+        cache_obtener = cache_guardar = None
+
+    if cache_obtener:
+        cacheado = cache_obtener(cultivo, departamento, municipio)
+        if cacheado and "error" not in cacheado:
+            return cacheado, "cache"
+
+    # 3) IA de búsqueda (lenta, con costo). Se cachea si sale bien.
+    parametros = obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima_suelo)
+    if isinstance(parametros, dict) and "error" not in parametros:
+        if cache_guardar:
+            try:
+                cache_guardar(cultivo, departamento, municipio, parametros, origen="ia_busqueda")
+                return parametros, "ia_busqueda"
+            except Exception:
+                return parametros, "ia_busqueda_sin_cache"
+        return parametros, "ia_busqueda_sin_cache"
+
+    return parametros, "ia_busqueda"
+
+
+# -----------------------------------------------------------------
 # CANDIDATOS DE CULTIVO (para la pantalla de "Opciones de siembra")
 # -----------------------------------------------------------------
 # Mismo principio que obtener_parametros_tecnicos, pero en vez de investigar
@@ -319,9 +373,59 @@ def obtener_parametros_tecnicos(cultivo, departamento, municipio, contexto_clima
 CAMPOS_REQUERIDOS_CANDIDATO = ["nombre_cultivo"] + CAMPOS_REQUERIDOS
 
 
-def _construir_prompt_candidatos(departamento, municipio, contexto_clima_suelo, tipo_terreno, correccion=None):
+def _describir_perfil_presupuesto_terreno(presupuesto_cop, area_m2):
+    """
+    Traduce presupuesto+área a una descripción de INTENSIDAD para que la IA
+    proponga opciones acordes: poco terreno + mucha plata => sistemas
+    intensivos (hidroponía, forraje verde hidropónico, invernadero, gourmet);
+    mucho terreno + poca plata => extensivos de bajo insumo. Devuelve texto
+    para insertar en el prompt, o "" si no hay datos.
+    """
+    try:
+        presupuesto = float(presupuesto_cop or 0)
+        area = float(area_m2 or 0)
+    except (TypeError, ValueError):
+        return ""
+    if presupuesto <= 0 or area <= 0:
+        return ""
+
+    inversion_por_m2 = presupuesto / area
+
+    if inversion_por_m2 >= 5000:
+        perfil = (
+            "PERFIL: POCO TERRENO con PRESUPUESTO ALTO por m² "
+            f"(~${inversion_por_m2:,.0f} COP/m²). El usuario puede permitirse "
+            "sistemas INTENSIVOS de alto valor en poca área. PRIORIZA proponer "
+            "opciones como: forraje verde hidropónico (ej. cebada/maíz), "
+            "hidroponía de hortalizas de hoja, cultivo bajo invernadero/túnel, "
+            "aromáticas y culinarias de alto valor, microgreens, hongos "
+            "(orellanas), fresa en macetas/canaleta, o flores. Estas usan poca "
+            "tierra pero requieren inversión inicial fuerte, que aquí SÍ está "
+            "disponible. NO propongas solo cultivos extensivos de campo abierto."
+        )
+    elif inversion_por_m2 <= 500:
+        perfil = (
+            "PERFIL: MUCHO TERRENO con PRESUPUESTO AJUSTADO por m² "
+            f"(~${inversion_por_m2:,.0f} COP/m²). PRIORIZA cultivos EXTENSIVOS "
+            "de bajo insumo por hectárea (maíz, fríjol, yuca, pastos, caña), "
+            "que rinden usando área en vez de inversión intensiva por m²."
+        )
+    else:
+        perfil = (
+            f"PERFIL: relación intermedia (~${inversion_por_m2:,.0f} COP/m²). "
+            "Propón una MEZCLA: algunas hortalizas/transitorios de campo abierto "
+            "y al menos una opción de mayor valor agregado o semi-intensiva."
+        )
+    return (
+        f"\n\nPRESUPUESTO TOTAL: ${presupuesto:,.0f} COP | ÁREA: {area:,.0f} m²\n{perfil}"
+    )
+
+
+def _construir_prompt_candidatos(departamento, municipio, contexto_clima_suelo, tipo_terreno,
+                                 presupuesto_cop=None, area_m2=None, correccion=None):
     contexto = f"\n\nCONTEXTO DE CLIMA Y SUELO YA MEDIDO EN LA ZONA:\n{contexto_clima_suelo}" if contexto_clima_suelo else ""
     terreno = f"\nTIPO DE TERRENO: {tipo_terreno}" if tipo_terreno else ""
+    perfil = _describir_perfil_presupuesto_terreno(presupuesto_cop, area_m2)
     nota_correccion = ""
     if correccion:
         nota_correccion = f"""
@@ -333,29 +437,40 @@ Reemplázalos por otros cultivos distintos, o corrige sus cifras con datos reale
 """
 
     return f"""
-Eres un asistente técnico que SOLO recopila datos agronómicos verificables mediante
-búsqueda web. NO debes redactar explicaciones para agricultores. Tu única salida
-es un JSON con una lista de cultivos candidatos y sus parámetros crudos.
+Eres un asesor agronómico que propone IDEAS DE NEGOCIO agrícola y recopila sus
+datos técnicos verificables mediante búsqueda web. Tu única salida es un JSON con
+una lista de cultivos/sistemas candidatos y sus parámetros crudos.
 
 UBICACIÓN: {municipio}, {departamento}, Colombia
-{contexto}{terreno}
+{contexto}{terreno}{perfil}
 {nota_correccion}
 
-Propón entre 6 y 8 cultivos DIFERENTES ENTRE SÍ que sean agronómicamente
-apropiados para el clima y suelo de esta zona (no solo los más obvios/genéricos:
-incluye al menos 2 opciones menos comunes pero viables, como hortalizas
-gourmet, aromáticas o frutas andinas, si el clima las permite).
+OBJETIVO: darle al agricultor IDEAS QUE AGREGUEN VALOR, no lo obvio. Asume que ya
+conoce los cultivos tradicionales de su región (a un papicultor de 30 años NO le
+sirve que le digas "siembre papa"). Propón entre 6 y 8 opciones DIFERENTES ENTRE
+SÍ, agronómicamente viables para el clima/suelo de la zona, y COHERENTES CON EL
+PERFIL de presupuesto/terreno de arriba. Incluye SIEMPRE:
+- Al menos 3 opciones NOVEDOSAS o de nicho de mayor valor agregado (aromáticas,
+  culinarias, hortalizas gourmet, frutas exóticas andinas, hidroponía, forraje
+  verde hidropónico, hongos, etc.) apropiadas al clima y al perfil.
+- Puedes incluir 1-2 opciones tradicionales sólidas como referencia, pero NO que
+  sean la mayoría.
+Considera la relación presupuesto/terreno: si hay poca área pero buen presupuesto,
+NO limites las ideas a lo que cabe en campo abierto; propón sistemas intensivos.
 
 Para cada uno: PASO 1, busca en fuentes técnicas (ICA, Agrosavia, Agronet, UPRA,
 FAO, Fenalce, Fedepapa, Asohofrucol, universidades, SENA, gobernaciones/secretarías
 de agricultura) los datos necesarios. PASO 2, para cualquier campo numérico que
-no encuentres publicado explícitamente (común en cultivos de nicho), da tu MEJOR
-ESTIMACIÓN TÉCNICA basada en conocimiento agronómico general para ese cultivo o
-uno comparable — NO uses null en campos de costo/densidad/tiempo, la app necesita
-un número técnicamente razonable siempre. Usa null solo en uno de los dos campos
-de rendimiento si el otro ya tiene valor. PASO 3, en "fuentes_consultadas" pon
-URLs reales completas — nunca marcadores internos de citación como "turn0search0";
-si no tienes URL real, escribe en texto plano que fue una estimación técnica.
+no encuentres publicado explícitamente (común en cultivos de nicho e intensivos),
+da tu MEJOR ESTIMACIÓN TÉCNICA basada en conocimiento agronómico general para ese
+cultivo o uno comparable — NO uses null en campos de costo/densidad/tiempo, la app
+necesita un número técnicamente razonable siempre. Para sistemas intensivos
+(hidroponía, invernadero), expresa los costos y el rendimiento en equivalente POR
+HECTÁREA de área ocupada aunque el sistema sea pequeño (la app escala al área real
+del usuario). Usa null solo en uno de los dos campos de rendimiento si el otro ya
+tiene valor. PASO 3, en "fuentes_consultadas" pon URLs reales completas — nunca
+marcadores internos de citación como "turn0search0"; si no tienes URL real, escribe
+en texto plano que fue una estimación técnica.
 
 Responde EXCLUSIVAMENTE con un JSON válido (sin texto adicional, sin marcadores
 de código), con esta estructura EXACTA:
@@ -391,17 +506,25 @@ de código), con esta estructura EXACTA:
 """
 
 
-def obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo=None, tipo_terreno=None, correccion=None):
+def obtener_candidatos_cultivo(departamento, municipio, contexto_clima_suelo=None, tipo_terreno=None,
+                               presupuesto_cop=None, area_m2=None, correccion=None):
     """
     Devuelve {"candidatos": [dict, dict, ...]} o {"error": "..."}.
     Cada dict tiene el mismo esquema que obtener_parametros_tecnicos, más
     "nombre_cultivo". No calcula ni filtra por viabilidad: eso lo hace
     app.py con calculo_agricola.py para cada candidato.
+
+    presupuesto_cop/area_m2: se usan para que la IA proponga opciones acordes
+    a la relación presupuesto↔terreno (intensivas si hay poca área y buen
+    presupuesto, extensivas en el caso contrario).
     """
     if not OPENAI_API_KEY:
         return {"error": "OPENAI_API_KEY no configurada en el backend"}
 
-    prompt = _construir_prompt_candidatos(departamento, municipio, contexto_clima_suelo, tipo_terreno, correccion)
+    prompt = _construir_prompt_candidatos(
+        departamento, municipio, contexto_clima_suelo, tipo_terreno,
+        presupuesto_cop=presupuesto_cop, area_m2=area_m2, correccion=correccion,
+    )
 
     payload = {
         "model": MODELO_BUSQUEDA,

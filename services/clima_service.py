@@ -1,6 +1,31 @@
 import requests
 
 BASE_URL = "https://api.open-meteo.com/v1/forecast"
+ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
+
+
+def get_elevation(lat, lon):
+    """
+    Elevación (msnm) para lat/lon vía Open-Meteo (mismo proveedor que el
+    clima, gratis, sin API key). Se usa para verificar aptitud climática de
+    un cultivo por rango de altitud sin depender de que la IA "adivine" el
+    piso térmico de la zona.
+    """
+    try:
+        response = requests.get(
+            ELEVATION_URL,
+            params={"latitude": lat, "longitude": lon},
+            timeout=15,
+        )
+        if response.status_code != 200:
+            return None
+        data = response.json()
+        elevaciones = data.get("elevation")
+        if isinstance(elevaciones, list) and elevaciones:
+            return float(elevaciones[0])
+        return None
+    except Exception:
+        return None
 
 
 def get_climate_data(lat, lon):
