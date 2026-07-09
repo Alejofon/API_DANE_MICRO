@@ -1,7 +1,7 @@
 # MiSiembra — Resumen general de pruebas de software
 
 - **Backend probado:** https://api-dane-micro.onrender.com
-- **Generado:** 2026-07-09 16:02:11
+- **Generado:** 2026-07-09 16:07:28
 
 Este archivo consolida todos los resultados de la carpeta `pruebas_validacion/`. Cada sección corresponde a un entregable del plan de pruebas del documento de grado.
 
@@ -114,11 +114,11 @@ En el Caso 2 (Villavicencio, $50.000.000, 10 ha), la primera opción fue
   el producto de ambos infla la cifra.
 - **Lo que SÍ funcionó:** el guardrail del motor marcó el registro con
   `ganancia_atipica = True` (detectó la anomalía).
-- **Lo que falta (trabajo futuro):** el ordenamiento de `/opciones-cultivo` es por
-  ganancia absoluta y **no** usa esa bandera, así que la opción atípica quedó de
-  primera. Recomendación: en el ranking, filtrar o penalizar los candidatos con
-  `ganancia_atipica = True`, o acotar el rendimiento/ha de los sistemas
-  intensivos con un tope específico por tipo de sistema.
+- **Corrección aplicada:** a raíz de este hallazgo se modificó `/opciones-cultivo`
+  para **excluir del listado** los candidatos con `ganancia_atipica = True` (siguen
+  accesibles vía `/plan-cultivo` si el usuario los pide directo). Pendiente de
+  desplegar y re-medir. Mejora futura adicional: acotar el rendimiento/ha de los
+  sistemas intensivos con un tope específico por tipo de sistema.
 
 ## Hallazgo 2 — La IA puede proponer cultivos climáticamente marginales
 
@@ -133,10 +133,11 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
   puede equivocarse).
 - **Lo que SÍ funcionó:** la métrica de precisión (89,3 % global) detectó y
   cuantificó exactamente estos casos.
-- **Lo que falta (trabajo futuro):** aplicar la verificación `es_apto_por_altitud`
-  también a los candidatos propuestos por IA (cuando el cultivo exista en la
-  tabla o declare su rango), descartando los no aptos antes de mostrarlos. Esto
-  llevaría la precisión cerca del 100 %.
+- **Corrección aplicada:** a raíz de este hallazgo se modificó `/opciones-cultivo`
+  para aplicar `es_apto_por_altitud` **también** a los candidatos propuestos por IA
+  (cuando mapean a un cultivo de la tabla), descartando los no aptos antes de
+  mostrarlos y registrándolos en `descartados_por_clima`. Se espera que esto lleve
+  la precisión cerca del 100 % en la re-medición (pendiente de desplegar).
 
 ## Lo que se confirmó correcto
 
