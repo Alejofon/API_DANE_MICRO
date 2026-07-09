@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 .env.local
 .env.*.local
+
+# Config local de Claude Code
+.claude/
