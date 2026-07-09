@@ -1,0 +1,19 @@
+{
+  "_debug_calculo": {
+    "altitud_msnm": 2595.0,
+    "bracket_intensidad": "extensivo",
+    "error_busqueda": null,
+    "evaluados": 7,
+    "origen_candidatos": "ia_busqueda",
+    "zona_consultada": "TOCANCIPA, CUNDINAMARCA"
+  },
+  "mensaje": "Con el presupuesto y el área indicados no encontramos un cultivo rentable en esta zona. Ajusta el presupuesto o el área e intenta de nuevo.",
+  "opciones": [],
+  "sin_opciones_viables": true,
+  "sugerencia_minimo": {
+    "area_minima_rentable_m2": 20,
+    "cultivo_mas_cercano": "Maíz amarillo criollo para grano/forraje",
+    "motivo": "A un precio de venta de ~$2,000/kg, este cultivo no cubre ni sus costos variables: no es rentable a ninguna escala en esta zona.",
+    "presupuesto_minimo_cop": 172925
+  }
+}

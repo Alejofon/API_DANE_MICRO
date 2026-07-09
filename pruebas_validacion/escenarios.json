@@ -1,0 +1,18 @@
+{
+  "descripcion": "Lote de escenarios para metricas_ia.py. Editable. Mezcla pisos térmicos (frío/templado/cálido), presupuestos chicos/grandes y áreas chicas/grandes. 'zona' debe existir en common.ZONAS.",
+  "escenarios": [
+    {"zona": "Turmequé",      "presupuesto": 2000000,  "area_m2": 10000,  "piso_termico": "frío"},
+    {"zona": "Villavicencio", "presupuesto": 50000000, "area_m2": 100000, "piso_termico": "cálido"},
+    {"zona": "Tocancipá",     "presupuesto": 5000000,  "area_m2": 5000,   "piso_termico": "frío"},
+    {"zona": "Santa Marta",   "presupuesto": 10000000, "area_m2": 2000,   "piso_termico": "cálido"},
+    {"zona": "Pasto",         "presupuesto": 8000000,  "area_m2": 8000,   "piso_termico": "frío alto"},
+    {"zona": "Armenia",       "presupuesto": 15000000, "area_m2": 3000,   "piso_termico": "templado"},
+    {"zona": "Florencia",     "presupuesto": 3000000,  "area_m2": 10000,  "piso_termico": "cálido"},
+    {"zona": "Medellín",      "presupuesto": 20000000, "area_m2": 4000,   "piso_termico": "templado"},
+    {"zona": "Valledupar",    "presupuesto": 8000000,  "area_m2": 8000,   "piso_termico": "cálido"},
+    {"zona": "Chocontá",      "presupuesto": 6000000,  "area_m2": 6000,   "piso_termico": "frío"}
+  ],
+  "cultivos_novedosos_para_alucinacion": [
+    "Espárrago", "Kale", "Jengibre", "Cúrcuma", "Arándano"
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "_debug_calculo": {
+    "altitud_msnm": 2354.0,
+    "bracket_intensidad": "extensivo",
+    "candidatos": [
+      {
+        "area_recomendada_ha": 1.3493,
+        "area_recomendada_m2": 13493.2,
+        "campos_estimados": [
+          "precio_venta_kg_cop"
+        ],
+        "cultivo": "Yuca para consumo fresco o doble propósito",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 41882964,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 0.2236,
+        "area_recomendada_m2": 2236.1,
+        "campos_estimados": [
+          "distancia_entre_surcos_m",
+          "distancia_entre_plantas_m",
+          "costo_semilla_o_plantula_unidad_cop (costo absurdo ajustado)"
+        ],
+        "cultivo": "Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 38299659,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 0.3054,
+        "area_recomendada_m2": 3054.3,
+        "campos_estimados": [
+          "costo_preparacion_terreno_por_ha_cop",
+          "jornales_necesarios_por_ha_ciclo",
+          "precio_venta_kg_cop"
+        ],
+        "cultivo": "Lechuga baby leaf hidropónica en sistema flotante",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 13086026,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 0.5846,
+        "area_recomendada_m2": 5845.7,
+        "campos_estimados": [
+          "precio_venta_kg_cop"
+        ],
+        "cultivo": "Albahaca (Ocimum basilicum) para fresco y venta gourmet",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 7537092,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 0.5412,
+        "area_recomendada_m2": 5412.1,
+        "campos_estimados": [
+          "precio_venta_kg_cop"
+        ],
+        "cultivo": "Uchuva (Physalis peruviana) en sistema tecnificado",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 7535165,
+        "nivel_rentabilidad": "Alta"
+      }
+    ],
+    "error_busqueda": null,
+    "origen_candidatos": "cache_ia",
+    "usando_respaldo_total": false,
+    "zona_consultada": "TURMEQUE, BOYACA"
+  },
+  "opciones": [
+    "Yuca para consumo fresco o doble propósito",
+    "Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas",
+    "Lechuga baby leaf hidropónica en sistema flotante",
+    "Albahaca (Ocimum basilicum) para fresco y venta gourmet",
+    "Uchuva (Physalis peruviana) en sistema tecnificado"
+  ]
+}

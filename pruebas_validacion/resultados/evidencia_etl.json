@@ -1,0 +1,57 @@
+{
+  "total_registros": 674248,
+  "fecha_max": "2026-07-08",
+  "fecha_min": "2020-02-01",
+  "articulos_distintos": 36,
+  "departamentos_distintos": 21,
+  "muestra_reciente": [
+    {
+      "articulo": "Tomate",
+      "departamento": "SUCRE",
+      "precio_kg": 2650.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Tomate de árbol",
+      "departamento": "SUCRE",
+      "precio_kg": 4650.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Yuca",
+      "departamento": "SUCRE",
+      "precio_kg": 2250.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Zanahoria",
+      "departamento": "SUCRE",
+      "precio_kg": 1906.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Ahuyama",
+      "departamento": "CESAR",
+      "precio_kg": 2300.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Banano",
+      "departamento": "CESAR",
+      "precio_kg": 1417.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Cebolla cabezona blanca",
+      "departamento": "CESAR",
+      "precio_kg": 3867.0,
+      "fecha": "2026-07-08"
+    },
+    {
+      "articulo": "Chócolo mazorca",
+      "departamento": "CESAR",
+      "precio_kg": 1767.0,
+      "fecha": "2026-07-08"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "_debug_calculo": {
+    "altitud_msnm": 437.0,
+    "bracket_intensidad": "extensivo",
+    "candidatos": [
+      {
+        "area_recomendada_ha": 0.2172,
+        "area_recomendada_m2": 2172.0,
+        "campos_estimados": [
+          "costo_semilla_o_plantula_unidad_cop (costo absurdo ajustado)"
+        ],
+        "cultivo": "Hongo ostra (Pleurotus spp.)",
+        "ganancia_atipica": true,
+        "ganancia_estimada_cop": 1618996692,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 1.3493,
+        "area_recomendada_m2": 13493.2,
+        "campos_estimados": [
+          "precio_venta_kg_cop"
+        ],
+        "cultivo": "Yuca industrial",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 53070252,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 0.3035,
+        "area_recomendada_m2": 3035.4,
+        "campos_estimados": [
+          "costo_semilla_o_plantula_unidad_cop (costo absurdo ajustado)"
+        ],
+        "cultivo": "Hierbabuena (Mentha spicata)",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 40995378,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 1.0809,
+        "area_recomendada_m2": 10809.3,
+        "campos_estimados": [],
+        "cultivo": "Guanábana (cultivar mejorado tipo AGROSAVIA)",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 14320988,
+        "nivel_rentabilidad": "Alta"
+      },
+      {
+        "area_recomendada_ha": 0.5846,
+        "area_recomendada_m2": 5845.7,
+        "campos_estimados": [
+          "precio_venta_kg_cop"
+        ],
+        "cultivo": "Albahaca (Ocimum basilicum) bajo manejo tecnificado",
+        "ganancia_atipica": false,
+        "ganancia_estimada_cop": 7537092,
+        "nivel_rentabilidad": "Alta"
+      }
+    ],
+    "error_busqueda": null,
+    "origen_candidatos": "cache_ia",
+    "usando_respaldo_total": false,
+    "zona_consultada": "VILLAVICENCIO, META"
+  },
+  "opciones": [
+    "Hongo ostra (Pleurotus spp.)",
+    "Yuca industrial",
+    "Hierbabuena (Mentha spicata)",
+    "Guanábana (cultivar mejorado tipo AGROSAVIA)",
+    "Albahaca (Ocimum basilicum) bajo manejo tecnificado"
+  ]
+}

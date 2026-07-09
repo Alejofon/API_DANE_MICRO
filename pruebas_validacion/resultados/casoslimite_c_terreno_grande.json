@@ -1,0 +1,63 @@
+{
+  "apto_para_la_zona": true,
+  "campos_estimados": [
+    "precio_venta_kg_cop"
+  ],
+  "cultivo": "Papa",
+  "entrada": {
+    "area_ha": 500.0,
+    "area_m2": 5000000.0,
+    "presupuesto_cop": 1000000.0,
+    "tipo_terreno": null,
+    "unidad_original": "Metros cuadrados"
+  },
+  "error_busqueda": null,
+  "motivo_aptitud": "Cultivo incluido en la tabla de referencia curada.",
+  "origen_parametros": "tabla_curada",
+  "parametros_tecnicos_usados": {
+    "categoria_cultivo": "ciclo_corto",
+    "ciclo_productivo_meses": 5,
+    "costo_agroquimicos_control_plagas_por_ha_cop": 6000000,
+    "costo_fertilizantes_por_ha_cop": 8000000,
+    "costo_preparacion_terreno_por_ha_cop": 2000000,
+    "costo_semilla_o_plantula_unidad_cop": 500,
+    "distancia_entre_plantas_m": 0.3,
+    "distancia_entre_surcos_m": 1.0,
+    "fuentes_consultadas": [
+      "Referencia agronómica general para papa de clima frío (altiplano cundiboyacense). Los costos de insumos de la papa son altos y volátiles (Fedepapa reportó ~$15.6M/ha en 2018 y ~$35M/ha en 2024); estas cifras son un punto de partida a refinar con la ficha vigente."
+    ],
+    "jornales_necesarios_por_ha_ciclo": 120,
+    "rendimiento_estimado_kg_por_ha": 22000,
+    "rendimiento_estimado_kg_por_planta": null,
+    "valor_jornal_cop": 50000
+  },
+  "precio_fuente": "DANE/SIPSA (tabla de precios real, actualizada a diario)",
+  "precio_venta_kg_cop_usado": 2943.0,
+  "resultado": {
+    "area_disponible_ha": 500.0,
+    "area_financiable_ha": 0.0221,
+    "area_minima_rentable_ha": 0.0057,
+    "area_recomendada_ha": 0.0221,
+    "area_recomendada_m2": 220.7,
+    "ciclo_productivo_meses": 5.0,
+    "costo_fijo_cop": 150000,
+    "costo_mano_obra_ha": 6000000,
+    "costo_material_vegetal_ha": 16666667,
+    "costo_real_invertido_cop": 1000000,
+    "costo_total_establecimiento_ha": 38666667,
+    "ganancia_atipica": false,
+    "ganancia_estimada_cop": 428830,
+    "ingreso_estimado_cop": 1428830,
+    "motivo_no_viable": null,
+    "nivel_rentabilidad": "Media",
+    "numero_plantas_estimadas": 736,
+    "plantas_por_ha": 33333.3,
+    "precio_fuente": "DANE/SIPSA (tabla de precios real, actualizada a diario)",
+    "precio_kg_usado_cop": 2943.0,
+    "presupuesto_minimo_recomendado_cop": 370272,
+    "produccion_estimada_kg": 485.5,
+    "retorno_inversion_meses": 11.7
+  },
+  "success": true,
+  "ubicacion": "TOCANCIPA, CUNDINAMARCA"
+}

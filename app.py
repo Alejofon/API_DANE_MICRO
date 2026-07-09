@@ -700,12 +700,23 @@ def opciones_cultivo():
 
         # Armar la lista (nombre, parametros). Si el candidato está en la
         # tabla curada, se usan SUS números (confiables) en vez de los de la IA.
+        # Además, si el candidato (venga de IA o de tabla) mapea a un cultivo de
+        # la tabla y su rango de altitud NO cuadra con la altitud real de la
+        # zona, se descarta aquí: la IA a veces propone cultivos climáticamente
+        # marginales (ej. yuca en clima frío) pese al contexto de clima en el
+        # prompt. Este filtro determinístico eleva la precisión de las opciones.
         pares = []  # (nombre, parametros_crudos, fuente_numeros)
+        descartados_por_clima = []
         for candidato in candidatos_crudos:
             nombre = str(candidato.get("nombre_cultivo", "")).strip()
             if not nombre:
                 continue
             en_tabla = buscar_en_tabla(nombre)
+            if en_tabla and altitud is not None:
+                apto, _motivo = es_apto_por_altitud(en_tabla, altitud)
+                if apto is False:
+                    descartados_por_clima.append(nombre)
+                    continue
             if en_tabla:
                 pares.append((nombre, en_tabla, "tabla_curada"))
             else:
@@ -756,10 +767,17 @@ def opciones_cultivo():
         # rentables. Un proyecto es viable si no está marcado "No viable" y su
         # ganancia estimada es positiva. Nunca se le propone al agricultor algo
         # que no puede hacer o que da pérdida.
+        # Además se EXCLUYEN los candidatos con ganancia_atipica: el motor marca
+        # así los casos con retorno irrealmente alto (típico de sistemas
+        # intensivos donde la IA infla el rendimiento/ha). Presentarlos —aunque
+        # el motor los detecte— desinformaría al agricultor, así que no se
+        # recomiendan (siguen disponibles vía /plan-cultivo si los pide directo).
         viables = [
             (nombre, calc, campos_est)
             for nombre, calc, campos_est in evaluados_unicos
-            if calc["nivel_rentabilidad"] != "No viable" and calc["ganancia_estimada_cop"] > 0
+            if calc["nivel_rentabilidad"] != "No viable"
+            and calc["ganancia_estimada_cop"] > 0
+            and not calc.get("ganancia_atipica", False)
         ]
         viables.sort(key=lambda item: item[1]["ganancia_estimada_cop"], reverse=True)
         top = viables[:5]
@@ -806,6 +824,7 @@ def opciones_cultivo():
                 "origen_candidatos": origen_candidatos,
                 "bracket_intensidad": bracket,
                 "altitud_msnm": altitud,
+                "descartados_por_clima": descartados_por_clima,
                 "usando_respaldo_total": usando_respaldo_total,
                 "error_busqueda": error_busqueda,
                 "candidatos": [

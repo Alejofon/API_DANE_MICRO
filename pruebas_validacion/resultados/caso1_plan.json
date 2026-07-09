@@ -1,0 +1,48 @@
+{
+  "_debug_calculo": {
+    "altitud_msnm": 2354.0,
+    "apto_para_la_zona": false,
+    "motivo_aptitud": "La zona está a ~2354 msnm, por encima del rango apto de este cultivo (0-1800 msnm). Suele ser demasiado frío/alto para él.",
+    "origen_parametros": "tabla_curada",
+    "zona_consultada": "TURMEQUE, BOYACA"
+  },
+  "beneficios": [],
+  "dificultad": {
+    "descripcion": "No se recomienda continuar con este cultivo en esta zona por incompatibilidad agronómica. La zona está a ~2354 msnm, por encima del rango apto de este cultivo (0-1800 msnm). Suele ser demasiado frío/alto para él.",
+    "nivel": "Alta"
+  },
+  "mercado": {
+    "canales_venta": [],
+    "compradores": [],
+    "precio_actual_kg": "No aplica",
+    "tendencias": "No aplica"
+  },
+  "pasos_siembra": [],
+  "plagas": [],
+  "rentabilidad": {
+    "area_minima_rentable": "No aplica",
+    "area_realmente_cultivable": "No aplica",
+    "descripcion": "La zona está a ~2354 msnm, por encima del rango apto de este cultivo (0-1800 msnm). Suele ser demasiado frío/alto para él.",
+    "distancia_siembra": "No aplica",
+    "ganancia_estimada_por_cosecha": "No aplica",
+    "nivel": "No viable",
+    "numero_plantas_estimadas": 0,
+    "presupuesto_minimo_recomendado": "No aplica",
+    "produccion_estimada": "No aplica",
+    "retorno_inversion_meses": null
+  },
+  "siembra_estimada": {
+    "area_minima_rentable": "No aplica",
+    "area_recomendada_siembra": "No aplica",
+    "distancia_siembra": "No aplica",
+    "numero_plantas_estimadas": 0,
+    "presupuesto_minimo_recomendado": "No aplica",
+    "produccion_estimada": "No aplica"
+  },
+  "tiempos": {
+    "calendario_fertilizacion": "No aplica",
+    "calendario_riego": "No aplica",
+    "cosecha_meses": 0,
+    "siembra_mejor_epoca": "No aplica"
+  }
+}

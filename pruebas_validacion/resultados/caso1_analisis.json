@@ -1,0 +1,127 @@
+{
+  "clima": {
+    "context": "Datos actuales y pronóstico diario de variables meteorológicas relevantes para la agricultura: temperatura, humedad relativa, precipitación, viento y evapotranspiración de referencia (ET₀). Fuente: Open-Meteo (open-meteo.com). Unidades: °C, %, mm, km/h.",
+    "data": {
+      "current": {
+        "humidity": 88,
+        "precipitation": 0.1,
+        "temperature": 15.5,
+        "wind_speed": 4.7
+      },
+      "daily": {
+        "evapotranspiration": 1.5,
+        "precipitation_sum": 21.2,
+        "temperature_max": 15.9,
+        "temperature_min": 11.8
+      }
+    }
+  },
+  "contexto_general": "Información consolidada para la evaluación de cultivos. Incluye clima, suelo, índice de precios de insumos (nacional) y precios de mercado del DANE para los tres principales grupos de alimentos en el departamento/municipio indicado. Los precios están en COP/kg.",
+  "insumos": {
+    "context": {
+      "alcance": "Nacional",
+      "base_periodo": "Enero de 2021 = 100",
+      "cambios_metodologicos": [
+        "A partir de enero de 2024 se amplía la canasta de productos del índice.",
+        "No se incluyen productos con ingrediente activo Clorpirifos, por la Resolución 06365 de 2023 del ICA.",
+        "Desde septiembre de 2024 no se incluyen productos con ingrediente activo Fipronil, por la Resolución 0740 de 2023 del ICA."
+      ],
+      "categorias": [
+        "fertilizantes",
+        "plaguicidas",
+        "otros insumos"
+      ],
+      "descripcion": "Índice que resume el comportamiento de los precios en el mercado minorista a nivel nacional de los productos más utilizados en la actividad agrícola para diferentes etapas de producción.",
+      "nota_importante": "Los valores representan un índice, no precios absolutos. Un valor de 100 equivale al nivel de enero de 2021.",
+      "proposito": "Apoyo en la toma de decisiones por parte de los actores del sector agrícola.",
+      "subcategorias": [
+        "simples",
+        "compuestos",
+        "herbicidas",
+        "fungicidas",
+        "insecticidas",
+        "coadyuvantes",
+        "reguladores fisiológicos",
+        "molusquicidas"
+      ],
+      "titulo": "Índice de precios de insumos agrícolas"
+    },
+    "data": {
+      "indice_total": 160.21,
+      "total_compuestos": 185.11,
+      "total_fertilizantes": 187.07,
+      "total_fungicidas": 113.1,
+      "total_herbicidas": 118.78,
+      "total_insecticidas": 115.99,
+      "total_otros": 132.32,
+      "total_plaguicidas": 117.42,
+      "total_simples": 189.06
+    }
+  },
+  "location": {
+    "departamento": "BOYACA",
+    "lat": 5.3253,
+    "lon": -73.4936,
+    "municipio": "TURMEQUE"
+  },
+  "metadata": {
+    "endpoint": "/analisis-terreno",
+    "timestamp": "2026-07-09T20:44:33.962116"
+  },
+  "precios_mercado": {
+    "context": "Precios de venta minorista recolectados por el DANE en centrales mayoristas. Se presentan estadísticas por grupo de producto para el departamento/municipio seleccionado. Los valores (COP/kg) son promedios históricos en el rango de fechas disponible. Esta información ayuda al modelo a evaluar la rentabilidad potencial de los cultivos.",
+    "por_grupo": {
+      "FRUTAS": {
+        "estadisticas": {
+          "fecha_fin_global": null,
+          "fecha_inicio_global": null,
+          "precio_mas_barato": null,
+          "precio_mas_caro": null,
+          "precio_promedio_grupo": null,
+          "producto_mas_barato": null,
+          "producto_mas_caro": null,
+          "total_productos": 0
+        },
+        "productos_mas_baratos": [],
+        "productos_mas_caros": []
+      },
+      "TUBERCULOS, RAICES Y PLATANOS": {
+        "estadisticas": {
+          "fecha_fin_global": null,
+          "fecha_inicio_global": null,
+          "precio_mas_barato": null,
+          "precio_mas_caro": null,
+          "precio_promedio_grupo": null,
+          "producto_mas_barato": null,
+          "producto_mas_caro": null,
+          "total_productos": 0
+        },
+        "productos_mas_baratos": [],
+        "productos_mas_caros": []
+      },
+      "VERDURAS Y HORTALIZAS": {
+        "estadisticas": {
+          "fecha_fin_global": null,
+          "fecha_inicio_global": null,
+          "precio_mas_barato": null,
+          "precio_mas_caro": null,
+          "precio_promedio_grupo": null,
+          "producto_mas_barato": null,
+          "producto_mas_caro": null,
+          "total_productos": 0
+        },
+        "productos_mas_baratos": [],
+        "productos_mas_caros": []
+      }
+    }
+  },
+  "success": true,
+  "suelo": {
+    "context": "Propiedades del suelo superficial (0-5 cm) según ISRIC SoilGrids vía WCS. Los valores representan pH en H₂O, contenido de arcilla (%) y arena (%). Valores nulos indican datos no disponibles o máscara (por ej., cuerpos de agua).",
+    "data": {
+      "clay": 292.01,
+      "ph": 45.82,
+      "sand": 243.49
+    }
+  }
+}
