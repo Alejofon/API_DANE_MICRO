@@ -3,10 +3,10 @@
     "context": "Datos actuales y pronóstico diario de variables meteorológicas relevantes para la agricultura: temperatura, humedad relativa, precipitación, viento y evapotranspiración de referencia (ET₀). Fuente: Open-Meteo (open-meteo.com). Unidades: °C, %, mm, km/h.",
     "data": {
       "current": {
-        "humidity": 88,
+        "humidity": 92,
         "precipitation": 0.1,
-        "temperature": 15.5,
-        "wind_speed": 4.7
+        "temperature": 14.7,
+        "wind_speed": 3.1
       },
       "daily": {
         "evapotranspiration": 1.5,
@@ -66,7 +66,7 @@
   },
   "metadata": {
     "endpoint": "/analisis-terreno",
-    "timestamp": "2026-07-09T20:44:33.962116"
+    "timestamp": "2026-07-09T21:22:39.892120"
   },
   "precios_mercado": {
     "context": "Precios de venta minorista recolectados por el DANE en centrales mayoristas. Se presentan estadísticas por grupo de producto para el departamento/municipio seleccionado. Los valores (COP/kg) son promedios históricos en el rango de fechas disponible. Esta información ayuda al modelo a evaluar la rentabilidad potencial de los cultivos.",

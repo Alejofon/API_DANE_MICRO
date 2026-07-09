@@ -1,8 +1,17 @@
-# Hallazgos de las pruebas (limitaciones detectadas · trabajo futuro)
+# Hallazgos de las pruebas (limitaciones detectadas y corregidas)
 
 Las pruebas automatizadas no solo confirmaron el comportamiento esperado;
-también expusieron dos limitaciones reales del sistema, útiles para la sección
-de discusión / trabajo futuro del documento.
+también expusieron dos limitaciones reales del sistema. Ambas se **corrigieron**
+y se **re-midió**, con mejora comprobada — un ciclo detección → corrección →
+verificación útil para la sección de resultados/discusión del documento.
+
+> **Antes de las correcciones:** precisión global = **89,3 %**; el Caso 2
+> (Villavicencio) mostraba como primera opción "Hongo ostra" con una ganancia
+> irreal de **$8.194.211.687**.
+> **Después de las correcciones (re-medición):** precisión global = **100,0 %**;
+> el Caso 2 ya no muestra la opción de ganancia atípica y encabeza con "Yuca
+> industrial" ($269.193.100). La tasa de alucinación de la IA se mantuvo en 5,5 %
+> y el recall@5 subió de 13,9 % a 17,2 %.
 
 ## Hallazgo 1 — Sistemas intensivos disparan ganancias atípicas
 
@@ -16,11 +25,11 @@ En el Caso 2 (Villavicencio, $50.000.000, 10 ha), la primera opción fue
   el producto de ambos infla la cifra.
 - **Lo que SÍ funcionó:** el guardrail del motor marcó el registro con
   `ganancia_atipica = True` (detectó la anomalía).
-- **Corrección aplicada:** a raíz de este hallazgo se modificó `/opciones-cultivo`
-  para **excluir del listado** los candidatos con `ganancia_atipica = True` (siguen
-  accesibles vía `/plan-cultivo` si el usuario los pide directo). Pendiente de
-  desplegar y re-medir. Mejora futura adicional: acotar el rendimiento/ha de los
-  sistemas intensivos con un tope específico por tipo de sistema.
+- **Corrección aplicada y verificada:** se modificó `/opciones-cultivo` para
+  **excluir del listado** los candidatos con `ganancia_atipica = True` (siguen
+  accesibles vía `/plan-cultivo` si el usuario los pide directo). Re-medición: el
+  Caso 2 ya no muestra el hongo ostra de $8.194 M. Mejora futura adicional: acotar
+  el rendimiento/ha de los sistemas intensivos con un tope por tipo de sistema.
 
 ## Hallazgo 2 — La IA puede proponer cultivos climáticamente marginales
 
@@ -35,11 +44,12 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
   puede equivocarse).
 - **Lo que SÍ funcionó:** la métrica de precisión (89,3 % global) detectó y
   cuantificó exactamente estos casos.
-- **Corrección aplicada:** a raíz de este hallazgo se modificó `/opciones-cultivo`
-  para aplicar `es_apto_por_altitud` **también** a los candidatos propuestos por IA
+- **Corrección aplicada y verificada:** se modificó `/opciones-cultivo` para
+  aplicar `es_apto_por_altitud` **también** a los candidatos propuestos por IA
   (cuando mapean a un cultivo de la tabla), descartando los no aptos antes de
-  mostrarlos y registrándolos en `descartados_por_clima`. Se espera que esto lleve
-  la precisión cerca del 100 % en la re-medición (pendiente de desplegar).
+  mostrarlos y registrándolos en `descartados_por_clima`. Re-medición: en Turmequé
+  "Yuca" aparece ahora en `descartados_por_clima` y la **precisión global subió de
+  89,3 % a 100,0 %**.
 
 ## Lo que se confirmó correcto
 

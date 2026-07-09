@@ -1,7 +1,7 @@
 # MiSiembra — Resumen general de pruebas de software
 
 - **Backend probado:** https://api-dane-micro.onrender.com
-- **Generado:** 2026-07-09 16:07:28
+- **Generado:** 2026-07-09 16:27:57
 
 Este archivo consolida todos los resultados de la carpeta `pruebas_validacion/`. Cada sección corresponde a un entregable del plan de pruebas del documento de grado.
 
@@ -31,27 +31,27 @@ Este archivo consolida todos los resultados de la carpeta `pruebas_validacion/`.
 
 ## 2. Métricas cuantitativas de la IA
 
-# Métricas cuantitativas de la IA — MiSiembra (2026-07-09 16:00:24)
+# Métricas cuantitativas de la IA — MiSiembra (2026-07-09 16:25:54)
 
 ## Resultados globales
 
-- **Precisión global:** 89.3%
-- **Exhaustividad global (recall@5):** 13.9%
+- **Precisión global:** 100.0%
+- **Exhaustividad global (recall@5):** 17.2%
 - **Tasa de corrección/alucinación IA:** 5.5%
 
 ## Detalle por escenario (precisión y recall)
 
 | Zona | Piso | Altitud | $ | Área m² | Recomendados | Precisión | Recall@5 | Apt+viables tabla | IA no verif. |
 |---|---|--:|--:|--:|---|--:|--:|--:|--:|
-| Turmequé | frío | 2354.0 | 2,000,000 | 10,000 | Yuca para consumo fresco o doble propósito, Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas, Lechuga baby leaf hidropónica en sistema flotante, Albahaca (Ocimum basilicum) para fresco y venta gourmet, Uchuva (Physalis peruviana) en sistema tecnificado | 0.75 | 0.13 | 23 | 1 |
-| Villavicencio | cálido | 437.0 | 50,000,000 | 100,000 | Hongo ostra (Pleurotus spp.), Yuca industrial, Hierbabuena (Mentha spicata), Guanábana (cultivar mejorado tipo AGROSAVIA), Albahaca (Ocimum basilicum) bajo manejo tecnificado | 1.0 | 0.133 | 15 | 3 |
-| Tocancipá | frío | 2595.0 | 5,000,000 | 5,000 | Tomate cherry bajo invernadero, Orellana (Pleurotus ostreatus) en bolsa, Lechuga crespa en hidroponia NFT, Hierbabuena / menta, Cilantro de corte | 0.667 | 0.091 | 22 | 2 |
-| Santa Marta | cálido | 10.0 | 10,000,000 | 2,000 | Seta ostra (Pleurotus spp.) en sala climatizada, Tomate cherry bajo invernadero ventilado, Lechuga hidropónica tipo romana/crespa en sistema NFT bajo invernadero o malla, Hierbabuena (Mentha spicata) intensiva en camas elevadas o macetas, Microgreens gourmet mixtos (rábano, mostaza, girasol, arveja) | 1.0 | 0.133 | 15 | 3 |
+| Turmequé | frío | 2354.0 | 2,000,000 | 10,000 | Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas, Lechuga baby leaf hidropónica en sistema flotante, Albahaca (Ocimum basilicum) para fresco y venta gourmet, Uchuva (Physalis peruviana) en sistema tecnificado, Fresa bajo macrotúnel o cubierta liviana | 1.0 | 0.174 | 23 | 1 |
+| Villavicencio | cálido | 437.0 | 50,000,000 | 100,000 | Yuca industrial, Hierbabuena (Mentha spicata), Guanábana (cultivar mejorado tipo AGROSAVIA), Albahaca (Ocimum basilicum) bajo manejo tecnificado | 1.0 | 0.133 | 15 | 2 |
+| Tocancipá | frío | 2595.0 | 5,000,000 | 5,000 | Lechuga crespa en hidroponia NFT, Hierbabuena / menta, Cilantro de corte, Albahaca aromatica, Fresa tecnificada en mesa o sustrato | 1.0 | 0.182 | 22 | 1 |
+| Santa Marta | cálido | 10.0 | 10,000,000 | 2,000 | Lechuga hidropónica tipo romana/crespa en sistema NFT bajo invernadero o malla, Hierbabuena (Mentha spicata) intensiva en camas elevadas o macetas, Microgreens gourmet mixtos (rábano, mostaza, girasol, arveja), Albahaca genovesa/culinaria bajo malla sombra o hidroponía | 1.0 | 0.133 | 15 | 2 |
 | Pasto | frío alto | 2546.0 | 8,000,000 | 8,000 | Mora de Castilla, Romero en seto o cama tecnificada, Lechuga hidropónica tipo batavia/crespa bajo cubierta, Cilantro de corte intensivo, Uchuva | 1.0 | 0.19 | 21 | 1 |
-| Armenia | templado | 1472.0 | 15,000,000 | 3,000 | Orellana (Pleurotus ostreatus) en sala climatizada, Follaje y flor de corte de alta densidad en invernadero (alstroemeria, gypsophila o limonium), Microgreens gourmet (rábano, girasol, arveja, mostaza), Lechuga hidropónica tipo NFT bajo cubierta, Fresa bajo cubierta en canaleta o maceta | 0.5 | 0.059 | 17 | 3 |
+| Armenia | templado | 1472.0 | 15,000,000 | 3,000 | Lechuga hidropónica tipo NFT bajo cubierta, Albahaca fresca gourmet en invernadero, Cilantro de corte fino en ambiente protegido | 1.0 | 0.176 | 17 | 0 |
 | Florencia | cálido | 258.0 | 3,000,000 | 10,000 | Yuca industrial para transformación (harina/almidón), Guayaba mejorada para mercado fresco y pulpa, Sacha inchi | 1.0 | 0.067 | 15 | 2 |
-| Medellín | templado | 1476.0 | 20,000,000 | 4,000 | Microgreens gourmet mixtos (rábano, mostaza, girasol, arveja), Tomate cherry bajo invernadero, Flor de corte bajo invernadero (crisantemo o clavel estándar), Orellana (Pleurotus ostreatus) en sala controlada, Lechuga hidropónica (sistema NFT o raíz flotante) | 1.0 | 0.118 | 17 | 3 |
-| Valledupar | cálido | 169.0 | 8,000,000 | 8,000 | Tomate cherry bajo invernadero o casa malla, Romero (Rosmarinus officinalis), Hierbabuena (Mentha spicata) para fresco, secado y aceites, Forraje verde hidropónico de maiz o cebada, Lechuga hidropónica en sistema protegido o malla sombra | 1.0 | 0.2 | 15 | 2 |
+| Medellín | templado | 1476.0 | 20,000,000 | 4,000 | Flor de corte bajo invernadero (crisantemo o clavel estándar), Orellana (Pleurotus ostreatus) en sala controlada, Lechuga hidropónica (sistema NFT o raíz flotante), Albahaca aromática en hidroponía o sustrato protegido | 1.0 | 0.118 | 17 | 2 |
+| Valledupar | cálido | 169.0 | 8,000,000 | 8,000 | Hierbabuena (Mentha spicata) para fresco, secado y aceites, Forraje verde hidropónico de maiz o cebada, Lechuga hidropónica en sistema protegido o malla sombra, Maracuya (Passiflora edulis), Albahaca (Ocimum basilicum) para fresco y coproductos | 1.0 | 0.267 | 15 | 1 |
 | Chocontá | frío | 2653.0 | 6,000,000 | 6,000 | Lechuga hidropónica tipo baby leaf / cabeza en NFT bajo cubierta, Cilantro de corte, Uchuva, Fresa bajo cubierta, Arveja grano verde con tutorado | 1.0 | 0.25 | 20 | 0 |
 
 ## Tasa de error/alucinación (cultivos novedosos → fuerza IA)
@@ -67,8 +67,8 @@ Este archivo consolida todos los resultados de la carpeta `pruebas_validacion/`.
 ## Definiciones (nota metodológica)
 
 - **Precisión** = cultivos recomendados climáticamente aptos (altitud real vs rango de la tabla curada, `es_apto_por_altitud`) y viables (el motor solo devuelve viables) / total recomendados verificables. Cultivos propuestos por IA fuera de la tabla se cuentan aparte (columna «IA no verif.»).
-- **Recall@5** = cultivos de la tabla aptos por altitud Y viables con el presupuesto/área (verificado con `/calculo-directo`) que aparecen entre las 5 opciones devueltas / total de esos cultivos. **Interpretación importante:** esta métrica está acotada estructuralmente por dos factores de diseño, no por un fallo del sistema. (1) La app devuelve solo 5 opciones, pero en promedio hay ~18 cultivos viables por zona → el recall máximo teórico es ~5/18 ≈ 28 %. (2) El sistema prioriza NOVEDAD: varias de las 5 opciones son cultivos propuestos por IA fuera de la tabla curada (columna «IA no verif.»), que por definición no cuentan como «cultivo de la tabla recuperado». Un recall@5 de ~14 % significa que el sistema cubre cerca de la mitad del máximo teórico con cultivos conocidos y usa el resto de los cupos para ideas novedosas — que es el comportamiento buscado.
-- **Tasa de alucinación** = campos técnicos numéricos que la validación completó/corrigió con respaldo (`campos_estimados`) / total de campos técnicos, promediado sobre cultivos novedosos que fuerzan la resolución por IA. (En esta corrida los cultivos novedosos salieron de caché de una corrida previa, por eso figuran como `origen=cache`: los valores de corrección son los que la IA produjo originalmente.)
+- **Recall@5** = cultivos de la tabla aptos por altitud Y viables con el presupuesto/área (verificado con `/calculo-directo`) que aparecen entre las 5 opciones devueltas / total de esos cultivos. **Interpretación:** está acotado estructuralmente por diseño, no por un fallo: (1) la app devuelve solo 5 opciones pero hay ~18 cultivos viables por zona en promedio → recall máximo teórico ~5/18 ≈ 28 %; (2) el sistema prioriza NOVEDAD, así que varias de las 5 opciones son cultivos propuestos por IA fuera de la tabla (columna «IA no verif.»), que no cuentan como «cultivo de tabla recuperado».
+- **Tasa de alucinación** = campos técnicos numéricos que la validación completó/corrigió con respaldo (`campos_estimados`) / total de campos técnicos, promediado sobre cultivos novedosos que fuerzan la resolución por IA.
 
 ---
 
@@ -96,11 +96,20 @@ Este archivo consolida todos los resultados de la carpeta `pruebas_validacion/`.
 
 ## 3b. Hallazgos y limitaciones detectadas
 
-# Hallazgos de las pruebas (limitaciones detectadas · trabajo futuro)
+# Hallazgos de las pruebas (limitaciones detectadas y corregidas)
 
 Las pruebas automatizadas no solo confirmaron el comportamiento esperado;
-también expusieron dos limitaciones reales del sistema, útiles para la sección
-de discusión / trabajo futuro del documento.
+también expusieron dos limitaciones reales del sistema. Ambas se **corrigieron**
+y se **re-midió**, con mejora comprobada — un ciclo detección → corrección →
+verificación útil para la sección de resultados/discusión del documento.
+
+> **Antes de las correcciones:** precisión global = **89,3 %**; el Caso 2
+> (Villavicencio) mostraba como primera opción "Hongo ostra" con una ganancia
+> irreal de **$8.194.211.687**.
+> **Después de las correcciones (re-medición):** precisión global = **100,0 %**;
+> el Caso 2 ya no muestra la opción de ganancia atípica y encabeza con "Yuca
+> industrial" ($269.193.100). La tasa de alucinación de la IA se mantuvo en 5,5 %
+> y el recall@5 subió de 13,9 % a 17,2 %.
 
 ## Hallazgo 1 — Sistemas intensivos disparan ganancias atípicas
 
@@ -114,11 +123,11 @@ En el Caso 2 (Villavicencio, $50.000.000, 10 ha), la primera opción fue
   el producto de ambos infla la cifra.
 - **Lo que SÍ funcionó:** el guardrail del motor marcó el registro con
   `ganancia_atipica = True` (detectó la anomalía).
-- **Corrección aplicada:** a raíz de este hallazgo se modificó `/opciones-cultivo`
-  para **excluir del listado** los candidatos con `ganancia_atipica = True` (siguen
-  accesibles vía `/plan-cultivo` si el usuario los pide directo). Pendiente de
-  desplegar y re-medir. Mejora futura adicional: acotar el rendimiento/ha de los
-  sistemas intensivos con un tope específico por tipo de sistema.
+- **Corrección aplicada y verificada:** se modificó `/opciones-cultivo` para
+  **excluir del listado** los candidatos con `ganancia_atipica = True` (siguen
+  accesibles vía `/plan-cultivo` si el usuario los pide directo). Re-medición: el
+  Caso 2 ya no muestra el hongo ostra de $8.194 M. Mejora futura adicional: acotar
+  el rendimiento/ha de los sistemas intensivos con un tope por tipo de sistema.
 
 ## Hallazgo 2 — La IA puede proponer cultivos climáticamente marginales
 
@@ -133,11 +142,12 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
   puede equivocarse).
 - **Lo que SÍ funcionó:** la métrica de precisión (89,3 % global) detectó y
   cuantificó exactamente estos casos.
-- **Corrección aplicada:** a raíz de este hallazgo se modificó `/opciones-cultivo`
-  para aplicar `es_apto_por_altitud` **también** a los candidatos propuestos por IA
+- **Corrección aplicada y verificada:** se modificó `/opciones-cultivo` para
+  aplicar `es_apto_por_altitud` **también** a los candidatos propuestos por IA
   (cuando mapean a un cultivo de la tabla), descartando los no aptos antes de
-  mostrarlos y registrándolos en `descartados_por_clima`. Se espera que esto lleve
-  la precisión cerca del 100 % en la re-medición (pendiente de desplegar).
+  mostrarlos y registrándolos en `descartados_por_clima`. Re-medición: en Turmequé
+  "Yuca" aparece ahora en `descartados_por_clima` y la **precisión global subió de
+  89,3 % a 100,0 %**.
 
 ## Lo que se confirmó correcto
 
@@ -160,17 +170,17 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
 
 **Datos de entrada:** presupuesto $2.000.000 COP, área 1 ha (10.000 m²), terreno plano
 
-**Origen de candidatos:** ia_busqueda · **Perfil:** extensivo · **Altitud:** 2354.0 msnm
+**Origen de candidatos:** cache_ia · **Perfil:** extensivo · **Altitud:** 2354.0 msnm
 
 | # | Cultivo | Rentabilidad | Ganancia (COP) | Área recom. (m²) |
 |--:|---|---|--:|--:|
-| 1 | Yuca para consumo fresco o doble propósito | Alta | 7,744,516 | 2,534 |
-| 2 | Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas | Alta | 7,071,510 | 420 |
-| 3 | Lechuga baby leaf hidropónica en sistema flotante | Alta | 2,335,954 | 574 |
-| 4 | Albahaca (Ocimum basilicum) para fresco y venta gourmet | Alta | 1,293,769 | 1,098 |
-| 5 | Uchuva (Physalis peruviana) en sistema tecnificado | Alta | 1,293,407 | 1,016 |
+| 1 | Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas | Alta | 7,071,510 | 420 |
+| 2 | Lechuga baby leaf hidropónica en sistema flotante | Alta | 2,335,954 | 574 |
+| 3 | Albahaca (Ocimum basilicum) para fresco y venta gourmet | Alta | 1,293,769 | 1,098 |
+| 4 | Uchuva (Physalis peruviana) en sistema tecnificado | Alta | 1,293,407 | 1,016 |
+| 5 | Fresa bajo macrotúnel o cubierta liviana | Alta | 1,021,436 | 378 |
 
-**Plan detallado ejecutado para:** Yuca para consumo fresco o doble propósito
+**Plan detallado ejecutado para:** Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas
 
 
 ### Caso 2 — Villavicencio
@@ -179,15 +189,14 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
 
 **Datos de entrada:** presupuesto $50.000.000 COP, área 10 ha (100.000 m²), terreno plano
 
-**Origen de candidatos:** ia_busqueda · **Perfil:** extensivo · **Altitud:** 437.0 msnm
+**Origen de candidatos:** cache_ia · **Perfil:** extensivo · **Altitud:** 437.0 msnm
 
 | # | Cultivo | Rentabilidad | Ganancia (COP) | Área recom. (m²) |
 |--:|---|---|--:|--:|
-| 1 | Hongo ostra (Pleurotus spp.) | Alta | 8,194,211,687 | 10,992 |
-| 2 | Yuca industrial | Alta | 269,193,100 | 68,288 |
-| 3 | Hierbabuena (Mentha spicata) | Alta | 208,083,205 | 15,362 |
-| 4 | Guanábana (cultivar mejorado tipo AGROSAVIA) | Alta | 73,086,420 | 54,705 |
-| 5 | Albahaca (Ocimum basilicum) bajo manejo tecnificado | Alta | 38,753,709 | 29,585 |
+| 1 | Yuca industrial | Alta | 269,193,100 | 68,288 |
+| 2 | Hierbabuena (Mentha spicata) | Alta | 208,083,205 | 15,362 |
+| 3 | Guanábana (cultivar mejorado tipo AGROSAVIA) | Alta | 73,086,420 | 54,705 |
+| 4 | Albahaca (Ocimum basilicum) bajo manejo tecnificado | Alta | 38,753,709 | 29,585 |
 
 ### Caso 3 — Turmequé vs Villavicencio
 
@@ -199,11 +208,11 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
 
 | # | Cultivo | Rentabilidad | Ganancia (COP) | Área recom. (m²) |
 |--:|---|---|--:|--:|
-| 1 | Yuca para consumo fresco o doble propósito | Alta | 41,882,964 | 13,493 |
-| 2 | Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas | Alta | 38,299,659 | 2,236 |
-| 3 | Lechuga baby leaf hidropónica en sistema flotante | Alta | 13,086,026 | 3,054 |
-| 4 | Albahaca (Ocimum basilicum) para fresco y venta gourmet | Alta | 7,537,092 | 5,846 |
-| 5 | Uchuva (Physalis peruviana) en sistema tecnificado | Alta | 7,535,165 | 5,412 |
+| 1 | Hongo ostra (Pleurotus ostreatus) en bolsa sobre residuos agrícolas | Alta | 38,299,659 | 2,236 |
+| 2 | Lechuga baby leaf hidropónica en sistema flotante | Alta | 13,086,026 | 3,054 |
+| 3 | Albahaca (Ocimum basilicum) para fresco y venta gourmet | Alta | 7,537,092 | 5,846 |
+| 4 | Uchuva (Physalis peruviana) en sistema tecnificado | Alta | 7,535,165 | 5,412 |
+| 5 | Fresa bajo macrotúnel o cubierta liviana | Alta | 6,087,104 | 2,011 |
 
 ## Caso 3 · Escenario B — Villavicencio ($10.000.000 · 2 ha)
 
@@ -213,28 +222,25 @@ sistema propuso **"Yuca para consumo fresco"**, un cultivo de tierra cálida
 
 | # | Cultivo | Rentabilidad | Ganancia (COP) | Área recom. (m²) |
 |--:|---|---|--:|--:|
-| 1 | Hongo ostra (Pleurotus spp.) | Alta | 1,618,996,692 | 2,172 |
-| 2 | Yuca industrial | Alta | 53,070,252 | 13,493 |
-| 3 | Hierbabuena (Mentha spicata) | Alta | 40,995,378 | 3,035 |
-| 4 | Guanábana (cultivar mejorado tipo AGROSAVIA) | Alta | 14,320,988 | 10,809 |
-| 5 | Albahaca (Ocimum basilicum) bajo manejo tecnificado | Alta | 7,537,092 | 5,846 |
+| 1 | Yuca industrial | Alta | 53,070,252 | 13,493 |
+| 2 | Hierbabuena (Mentha spicata) | Alta | 40,995,378 | 3,035 |
+| 3 | Guanábana (cultivar mejorado tipo AGROSAVIA) | Alta | 14,320,988 | 10,809 |
+| 4 | Albahaca (Ocimum basilicum) bajo manejo tecnificado | Alta | 7,537,092 | 5,846 |
 
 ### Comparativa ambiental
 
-# Comparativa ambiental — 2026-07-09 16:00:17
+# Comparativa ambiental — 2026-07-09 16:23:38
 
 | Variable | Turmequé (Boyacá) | Villavicencio (Meta) |
 |---|--:|--:|
-| temperatura_C | 15.5 | 25.3 |
-| humedad_% | 88 | 87 |
+| temperatura_C | 14.7 | 25.2 |
+| humedad_% | 92 | 87 |
 | precipitacion_mm | 21.2 | 19.0 |
 | evapotranspiracion_mm | 1.5 | 2.14 |
-| pH | 4.58 | n/d |
-| arcilla_% | 29.2 | n/d |
-| arena_% | 24.35 | n/d |
+| pH | 4.58 | None |
+| arcilla_% | 29.2 | None |
+| arena_% | 24.35 | None |
 | altitud_msnm | 2354.0 | 437.0 |
-
-> Suelo (ISRIC SoilGrids): pH y texturas escalados a unidades reales (pH×10 y g/kg del origen). "n/d" = ISRIC no devolvió dato en ese punto.
 
 ---
 

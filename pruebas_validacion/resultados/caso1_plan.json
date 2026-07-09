@@ -1,48 +1,99 @@
 {
   "_debug_calculo": {
-    "altitud_msnm": 2354.0,
-    "apto_para_la_zona": false,
-    "motivo_aptitud": "La zona está a ~2354 msnm, por encima del rango apto de este cultivo (0-1800 msnm). Suele ser demasiado frío/alto para él.",
-    "origen_parametros": "tabla_curada",
+    "advertencia_datos_genericos": true,
+    "area_disponible_ha": 1.0,
+    "area_recomendada_ha": 0.042,
+    "campos_estimados": [
+      "distancia_entre_surcos_m",
+      "distancia_entre_plantas_m",
+      "costo_semilla_o_plantula_unidad_cop (costo absurdo ajustado)"
+    ],
+    "costo_total_establecimiento_ha": 44200000,
+    "error_busqueda": null,
+    "fuentes_consultadas": [
+      "https://www.fao.org/docrep/019/i3556e/i3556e.pdf",
+      "https://www.fao.org/family-farming/detail/en/c/1613788/",
+      "https://agris.fao.org/search/en/providers/122224/records/68518938aab9439e79fd26f3"
+    ],
+    "ganancia_atipica": false,
+    "motivo_no_viable": null,
+    "origen_parametros": "cache",
+    "presupuesto_minimo_recomendado_cop": 238100,
     "zona_consultada": "TURMEQUE, BOYACA"
   },
-  "beneficios": [],
+  "beneficios": [
+    "El cultivo tiene un muy buen valor por área, permitiendo obtener altos rendimientos en espacios reducidos.",
+    "Utiliza residuos agrícolas locales como sustrato, lo que reduce costos y contribuye a la sostenibilidad ambiental.",
+    "Puede integrarse con cultivos hortícolas para aprovechar subproductos y aumentar la rentabilidad del predio."
+  ],
   "dificultad": {
-    "descripcion": "No se recomienda continuar con este cultivo en esta zona por incompatibilidad agronómica. La zona está a ~2354 msnm, por encima del rango apto de este cultivo (0-1800 msnm). Suele ser demasiado frío/alto para él.",
-    "nivel": "Alta"
+    "descripcion": "El cultivo de hongo ostra requiere manejo cuidadoso de la humedad y la higiene para evitar plagas y contaminantes como moscas de sustrato y Trichoderma. Es necesario contar con infraestructura sombreada y controlada para mantener condiciones óptimas de temperatura y humedad. Aunque no requiere fertilización mineral, la pasteurización y manejo sanitario del sustrato son críticos para el éxito. Por lo tanto, la dificultad radica en mantener un ambiente limpio y controlado durante todo el ciclo productivo.",
+    "nivel": "Media"
   },
   "mercado": {
-    "canales_venta": [],
+    "canales_venta": [
+      "Mercados locales",
+      "Tiendas de productos agrícolas",
+      "Restaurantes y hoteles",
+      "Ferias agroecológicas"
+    ],
     "compradores": [],
-    "precio_actual_kg": "No aplica",
-    "tendencias": "No aplica"
+    "precio_actual_kg": "$12.000 COP",
+    "tendencias": "En Colombia, la demanda de hongos comestibles como el ostra está en crecimiento debido a su valor nutricional y uso en gastronomía saludable. Se observa un interés creciente en productos frescos y cultivados localmente, lo que favorece a pequeños y medianos productores que pueden ofrecer calidad y frescura. Integrar este cultivo con horticultura puede abrir oportunidades para diversificar ingresos y acceder a nichos de mercado con mayor margen."
   },
-  "pasos_siembra": [],
-  "plagas": [],
+  "pasos_siembra": [
+    "Preparar el sustrato con residuos agrícolas y realizar una pasteurización adecuada para eliminar contaminantes.",
+    "Inocular el sustrato con micelio limpio de Pleurotus ostreatus en condiciones higiénicas.",
+    "Colocar el sustrato inoculado en bolsas plásticas con perforaciones para la aireación.",
+    "Ubicar las bolsas en un área sombreada, limpia y con humedad controlada, respetando la distancia de siembra de 0.3 m entre surcos y 0.25 m entre plantas.",
+    "Mantener nebulización ligera diaria o dos veces al día para conservar la humedad sin encharcar.",
+    "Vigilar constantemente la presencia de plagas y contaminantes, aplicando controles preventivos y correctivos según sea necesario.",
+    "Cosechar los cuerpos fructíferos aproximadamente a los 4 meses, cuando estén en su punto óptimo de desarrollo."
+  ],
+  "plagas": [
+    {
+      "control": "Mantener higiene estricta, usar mallas para evitar ingreso de moscas, colocar trampas y retirar inmediatamente las bolsas contaminadas.",
+      "epoca_riesgo": "Ocurre principalmente en condiciones de alta humedad y cuando el sustrato no está bien manejado.",
+      "nombre": "Moscas de sustrato",
+      "sintomas": "Presencia de larvas dentro de las bolsas, debilitamiento del micelio y contaminación del cultivo."
+    },
+    {
+      "control": "Realizar una pasteurización correcta del sustrato, inocular con micelio limpio y mantener un manejo sanitario riguroso.",
+      "epoca_riesgo": "Se presenta cuando hay fallas en la desinfección del sustrato.",
+      "nombre": "Trichoderma contaminante",
+      "sintomas": "Aparición de un crecimiento verde sobre el sustrato que compite e inhibe el desarrollo del micelio del hongo ostra."
+    },
+    {
+      "control": "Mantener aseo, buena ventilación, eliminar residuos y aplicar control físico para evitar su proliferación.",
+      "epoca_riesgo": "Se incrementa en ambientes cálidos y cerrados.",
+      "nombre": "Ácaros",
+      "sintomas": "Disminución en el rendimiento y daño visible en los cuerpos fructíferos del hongo."
+    }
+  ],
   "rentabilidad": {
-    "area_minima_rentable": "No aplica",
-    "area_realmente_cultivable": "No aplica",
-    "descripcion": "La zona está a ~2354 msnm, por encima del rango apto de este cultivo (0-1800 msnm). Suele ser demasiado frío/alto para él.",
-    "distancia_siembra": "No aplica",
-    "ganancia_estimada_por_cosecha": "No aplica",
-    "nivel": "No viable",
-    "numero_plantas_estimadas": 0,
-    "presupuesto_minimo_recomendado": "No aplica",
-    "produccion_estimada": "No aplica",
-    "retorno_inversion_meses": null
+    "area_minima_rentable": "≈20 m²",
+    "area_realmente_cultivable": "420 m² (≈0.042 ha) de las 1.000 ha disponibles",
+    "descripcion": "La rentabilidad alta se debe a que con un área relativamente pequeña de 420 m² se puede obtener una producción estimada de aproximadamente 756 kg por ciclo, generando una ganancia de $7.071.510 COP por cosecha. Además, el retorno de inversión es rápido, de solo 1.1 meses, lo que indica que la inversión inicial se recupera en poco tiempo. El cultivo utiliza residuos agrícolas locales como sustrato, lo que reduce costos y aprovecha recursos disponibles en la zona. Sin embargo, es importante mencionar que los datos técnicos usados son valores genéricos conservadores y se recomienda validar esta información con un técnico local para ajustar expectativas y manejo específico.",
+    "distancia_siembra": "0.3 m entre surcos x 0.25 m entre plantas",
+    "ganancia_estimada_por_cosecha": "$7.071.510 COP",
+    "nivel": "Alta",
+    "numero_plantas_estimadas": 5600,
+    "presupuesto_minimo_recomendado": "$238.100 COP",
+    "produccion_estimada": "≈756 kg por ciclo",
+    "retorno_inversion_meses": 1.1
   },
   "siembra_estimada": {
-    "area_minima_rentable": "No aplica",
-    "area_recomendada_siembra": "No aplica",
-    "distancia_siembra": "No aplica",
-    "numero_plantas_estimadas": 0,
-    "presupuesto_minimo_recomendado": "No aplica",
-    "produccion_estimada": "No aplica"
+    "area_minima_rentable": "≈20 m²",
+    "area_recomendada_siembra": "420 m² (≈0.042 ha) de las 1.000 ha disponibles",
+    "distancia_siembra": "0.3 m entre surcos x 0.25 m entre plantas",
+    "numero_plantas_estimadas": 5600,
+    "presupuesto_minimo_recomendado": "$238.100 COP",
+    "produccion_estimada": "≈756 kg por ciclo"
   },
   "tiempos": {
-    "calendario_fertilizacion": "No aplica",
-    "calendario_riego": "No aplica",
-    "cosecha_meses": 0,
-    "siembra_mejor_epoca": "No aplica"
+    "calendario_fertilizacion": "No se aplica fertilización mineral convencional. El manejo se basa en la correcta pasteurización del sustrato, suplementación orgánica y control riguroso de la humedad para asegurar un ambiente propicio para el desarrollo del hongo.",
+    "calendario_riego": "Se recomienda realizar nebulización ligera una o dos veces al día según la humedad ambiental, manteniendo siempre una humedad alta pero sin encharcar el sustrato para evitar contaminación y favorecer el crecimiento del hongo.",
+    "cosecha_meses": 4.0,
+    "siembra_mejor_epoca": "El hongo ostra puede sembrarse durante todo el año siempre que se cuente con infraestructura adecuada que brinde sombra, limpieza y control de humedad. Es importante evitar lugares con exceso de polvo y calor para favorecer el desarrollo del micelio."
   }
 }

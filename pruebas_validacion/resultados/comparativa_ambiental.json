@@ -1,7 +1,7 @@
 {
   "Turmequé": {
-    "temperatura_C": 15.5,
-    "humedad_%": 88,
+    "temperatura_C": 14.7,
+    "humedad_%": 92,
     "precipitacion_mm": 21.2,
     "evapotranspiracion_mm": 1.5,
     "pH": 4.58,
@@ -10,7 +10,7 @@
     "altitud_msnm": 2354.0
   },
   "Villavicencio": {
-    "temperatura_C": 25.3,
+    "temperatura_C": 25.2,
     "humedad_%": 87,
     "precipitacion_mm": 19.0,
     "evapotranspiracion_mm": 2.14,

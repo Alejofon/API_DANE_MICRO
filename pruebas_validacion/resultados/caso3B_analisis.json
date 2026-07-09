@@ -4,9 +4,9 @@
     "data": {
       "current": {
         "humidity": 87,
-        "precipitation": 0.1,
-        "temperature": 25.3,
-        "wind_speed": 2.9
+        "precipitation": 0.0,
+        "temperature": 25.2,
+        "wind_speed": 2.3
       },
       "daily": {
         "evapotranspiration": 2.14,
@@ -66,7 +66,7 @@
   },
   "metadata": {
     "endpoint": "/analisis-terreno",
-    "timestamp": "2026-07-09T20:46:38.085970"
+    "timestamp": "2026-07-09T21:23:33.620741"
   },
   "precios_mercado": {
     "context": "Precios de venta minorista recolectados por el DANE en centrales mayoristas. Se presentan estadísticas por grupo de producto para el departamento/municipio seleccionado. Los valores (COP/kg) son promedios históricos en el rango de fechas disponible. Esta información ayuda al modelo a evaluar la rentabilidad potencial de los cultivos.",

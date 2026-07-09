@@ -4,17 +4,6 @@
     "bracket_intensidad": "extensivo",
     "candidatos": [
       {
-        "area_recomendada_ha": 1.0992,
-        "area_recomendada_m2": 10992.3,
-        "campos_estimados": [
-          "costo_semilla_o_plantula_unidad_cop (costo absurdo ajustado)"
-        ],
-        "cultivo": "Hongo ostra (Pleurotus spp.)",
-        "ganancia_atipica": true,
-        "ganancia_estimada_cop": 8194211687,
-        "nivel_rentabilidad": "Alta"
-      },
-      {
         "area_recomendada_ha": 6.8288,
         "area_recomendada_m2": 68287.7,
         "campos_estimados": [
@@ -57,13 +46,13 @@
         "nivel_rentabilidad": "Alta"
       }
     ],
+    "descartados_por_clima": [],
     "error_busqueda": null,
-    "origen_candidatos": "ia_busqueda",
+    "origen_candidatos": "cache_ia",
     "usando_respaldo_total": false,
     "zona_consultada": "VILLAVICENCIO, META"
   },
   "opciones": [
-    "Hongo ostra (Pleurotus spp.)",
     "Yuca industrial",
     "Hierbabuena (Mentha spicata)",
     "Guanábana (cultivar mejorado tipo AGROSAVIA)",

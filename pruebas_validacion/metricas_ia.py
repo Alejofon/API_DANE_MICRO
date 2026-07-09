@@ -207,7 +207,12 @@ def main():
         "IA fuera de la tabla se cuentan aparte (columna «IA no verif.»).",
         "- **Recall@5** = cultivos de la tabla aptos por altitud Y viables con el "
         "presupuesto/área (verificado con `/calculo-directo`) que aparecen entre las 5 "
-        "opciones devueltas / total de esos cultivos. Acotado por el tope de 5 opciones.",
+        "opciones devueltas / total de esos cultivos. **Interpretación:** está acotado "
+        "estructuralmente por diseño, no por un fallo: (1) la app devuelve solo 5 "
+        "opciones pero hay ~18 cultivos viables por zona en promedio → recall máximo "
+        "teórico ~5/18 ≈ 28 %; (2) el sistema prioriza NOVEDAD, así que varias de las 5 "
+        "opciones son cultivos propuestos por IA fuera de la tabla (columna «IA no "
+        "verif.»), que no cuentan como «cultivo de tabla recuperado».",
         "- **Tasa de alucinación** = campos técnicos numéricos que la validación "
         "completó/corrigió con respaldo (`campos_estimados`) / total de campos técnicos, "
         "promediado sobre cultivos novedosos que fuerzan la resolución por IA.",
